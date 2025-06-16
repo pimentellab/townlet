@@ -29,6 +29,8 @@ Please cite the following publication if you use townlet:
 
 Once townlet is installed and the environment activated individual donor proliferation and group wise effects can be infered by calling two functions. 
 
+<br><br>
+
 ### Step 1: Initiate village object 
 
 The following function must be be run first to check that the data is in the correct format based on the user specified model. Townlet uses a generalized linear model framework to estimate donor proliferation effects relative to a baseline donor.
@@ -113,7 +115,7 @@ Sometimes donors in a village may have inconsistent growth proliferation across 
 
 If there is an imbalance in the number of donors that you are testing for a given trait, you should choose the baseline from the most represented group (e.g. sex imbalance in donors with specific genetics). We want to learn as much from the under-represented groups as possible, so don’t select these individuals as the baseline. 
 
-
+<br><br>
 
 ### Step 2: Run model
 
@@ -130,6 +132,7 @@ run_townlet(village,                # Village initiated using init_village()
             priors=NULL,            # Provide custom priors
             comp=0)                 # Run on local computer comp=0, server comp=1   
 ```
+<br><br>
 
 Townlet will output the following files: 
 
