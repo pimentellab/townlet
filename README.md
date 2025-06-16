@@ -77,7 +77,7 @@ ___
 
 Please provide townlet's init_village() function with a filepath to a .csv file which has the following required column names (donor, time, replicate, representation). Optional columns must also be included if estimating treatment or donor covariate effects (e.g. if model=treatment_lead + sex, include additional columns: treatment_lead, sex). 
 
-<img src="figures/growthrates.png" alt="Growth rate plot" width="500"/>
+<img src="images/dataformat.png" alt="Input data format" width="500"/>
 
 <br><br>
 
