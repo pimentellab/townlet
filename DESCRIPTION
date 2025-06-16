@@ -1,11 +1,27 @@
 Package: townlet
-Title: What the Package Does (One Line, Title Case)
+Title: Compositional modeling of cell village proliferation effects
 Version: 0.0.0.9000
 Authors@R: 
-    person("First", "Last", , "first.last@example.com", role = c("aut", "cre"))
-Description: What the package does (one paragraph).
-License: `use_mit_license()`, `use_gpl3_license()` or friends to pick a
-    license
+    person("Chloe", "Hanson", "chloe.hanso@gmail.com", role = c("aut", "cre"), comment= c(ORCID = "0000-0002-2728-1434"))
+Description: Hierarchical Dirichlet regression model for estimating treatment specific donor 
+    and group (e.g. sex, ancestry, genetics) proliferation effects from cell village compositional data.
+URL: https://devtools.r-lib.org/, https://github.com/r-lib/devtools
+BugReports: https://github.com/r-lib/devtools/issues
+License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
+Imports: 
+    data.table,
+    DirichletReg,
+    dplyr,
+    ggh4x,
+    ggplot2,
+    grid,
+    methods,
+    rlang,
+    rstan,
+    stats,
+    stringr,
+    tidyr,
+    utils
