@@ -1,6 +1,15 @@
 # Townlet 
 
-Hierarchical Dirichlet regression model for infering statistically significant treatment specific donor and group (e.g. sex, ancestry, genetics) proliferation effects from cell village compositional data. 
+<table>
+<tr>
+<td width="140px">
+  <img src="images/logo.png" width="120"/>
+</td>
+<td>
+  Hierarchical Dirichlet regression model for infering statistically significant treatment specific donor and group (e.g. sex, ancestry, genetics) proliferation effects from cell village compositional data.
+</td>
+</tr>
+</table>
 
 <br><br>
 
@@ -29,7 +38,7 @@ Please cite the following publication if you use townlet:
 
 Once townlet is installed and the environment activated individual donor proliferation and group wise effects can be infered by calling two functions. 
 
-<br><br>
+<br>
 
 ### Step 1: Initiate village object 
 
@@ -40,18 +49,18 @@ The following function must be be run first to check that the data is in the cor
 library(townlet)
 
 # Initiate village object
-init_village(datapath,              # Path to compositional data .csv file
-             outdir= './',          # Townlet output directory to save RDS files and plots
-             name='test_townlet',   # Name of analysis (will be used in output directory/file names) 
-             model=NULL,            # Define generalized linear model
-             alldonors=TRUE,        # Include all original donors
-             normalize=FALSE,       # Compositional data must sum to 1. If removing a donor set to normalize=TRUE to renormalize. 
-             cls=NULL,              # Colors to use for each donor
-             T0_cutoff=NULL,        # Remove donors from analysis with very low representation at time 0 (below cutoff set here). 
-             sim=FALSE,             # If using model for simulated data set to sim=TRUE to only save model fit (no plots). 
-             timeunit='days',       # Time unit of experiment (e.g. days, cell passages, etc.)
-             baseline=NULL,         # Baseline donor to use
-             ebayes=TRUE)           # Use empirical bayes approach to estimate dispersion (reccomended). If ebayes=TRUE a dispersion prior will be set instead of learned from the data.
+village <- init_village(datapath,              # Path to compositional data .csv file
+                        outdir= './',          # Townlet output directory to save RDS files and plots
+                        name='test_townlet',   # Name of analysis (will be used in output directory/file names) 
+                        model=NULL,            # Define generalized linear model
+                        alldonors=TRUE,        # Include all original donors
+                        normalize=FALSE,       # Compositional data must sum to 1. If removing a donor set to normalize=TRUE to renormalize. 
+                        cls=NULL,              # Colors to use for each donor
+                        T0_cutoff=NULL,        # Remove donors from analysis with very low representation at time 0 (below cutoff set here). 
+                        sim=FALSE,             # If using model for simulated data set to sim=TRUE to only save model fit (no plots). 
+                        timeunit='days',       # Time unit of experiment (e.g. days, cell passages, etc.)
+                        baseline=NULL,         # Baseline donor to use
+                        ebayes=TRUE)           # Use empirical bayes approach to estimate dispersion (reccomended). If ebayes=TRUE a dispersion prior will be set instead of learned from the data.
 ```
 
 <br><br>
@@ -122,15 +131,15 @@ If there is an imbalance in the number of donors that you are testing for a give
 Once village object is successfully initiated the model can be run using the following function. We recommend changing the number of cores equal to the number of chains (e.g. cores=4) and using all default settings. There may be certain circumstances where the sample/warmup number should be increased (see below for details). 
 
 ```{r}
-run_townlet(village,                # Village initiated using init_village()
-            cores=1,                # Number of cores for sampler
-            samples=2e4,            # Number of samples (including warmup)
-            warmup=1e4,             # Number of warmup samples
-            chains=4,               # Number of sample chains
-            credinterval=0.95,      # Credible interval threshold
-            ppck=TRUE,              # Run posterior predictive checks
-            priors=NULL,            # Provide custom priors
-            comp=0)                 # Run on local computer comp=0, server comp=1   
+village <- run_townlet(village,                # Village initiated using init_village()
+                       cores=1,                # Number of cores for sampler
+                       samples=2e4,            # Number of samples (including warmup)
+                       warmup=1e4,             # Number of warmup samples
+                       chains=4,               # Number of sample chains
+                       credinterval=0.95,      # Credible interval threshold
+                       ppck=TRUE,              # Run posterior predictive checks
+                       priors=NULL,            # Provide custom priors
+                       comp=0)                 # Run on local computer comp=0, server comp=1   
 ```
 <br><br>
 
@@ -153,8 +162,11 @@ Townlet will output the following files:
 - [modelname]_phi_r.png – Dispersion time effect per replicate (slope)
 
 *Diagnostic Plots*
-- [modelname]_ESS.png – Diagnostic plot: check that all effective sample sizes are >1000
+- [modelname]_ESS.png – Diagnostic plot: check that all effective sample sizes are >1000. If not, consider increasing sample/warmup number. 
 - [modelname]_ppck_barplot.png – Posterior predictive checks: visually inspect how many original samples fall within 95% credible intervals for each donor
+
+### Step 3: Interpret results
+
 
 
 
