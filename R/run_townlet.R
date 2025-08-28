@@ -244,7 +244,7 @@ model_inputs.Village <- function(village) {
   ## rep_indx of samples (vector length N)
   village$rep_indx <- as.vector(df$replicate)
 
-  #Set up X matrix
+  #Set up z_d matrix
   if (!is.null(village$model)) {
     if (length(village$treatcol) == 1) {
       if(length(village$donorcov[grepl('treatment_', village$donorcov)]) >0) {
@@ -258,16 +258,16 @@ model_inputs.Village <- function(village) {
       }
     }
 
-    village$X <- model.matrix(as.formula(village$model), data=village$data_noT0)
-    village$P <- ncol(village$X)
+    village$z_d <- model.matrix(as.formula(village$model), data=village$data_noT0)
+    village$P <- ncol(village$z_d)
 
     # Check if matrix is full rank
-    rank <- qr(village$X)$rank
-    if(rank != ncol(village$X)) {
+    rank <- qr(village$z_d)$rank
+    if(rank != ncol(village$z_d)) {
       stop('Model identity matrix is not full rank.')
     }
   } else {
-    village$X <- matrix(1, nrow = village$num_donors*village$N, ncol = 1)
+    village$z_d <- matrix(1, nrow = village$num_donors*village$N, ncol = 1)
     village$P <- 1
   }
 
@@ -347,7 +347,7 @@ def_priors.Village <- function(village) {
         })
 
       phi_intercept <- round(df_freqdir$`unlist(coef(fit))`[df_freqdir$param == 'gamma.gamma.(Intercept)'], 3)
-      beta0d_mean <- abs(df_freqdir$`unlist(coef(fit))`[df_freqdir$param != 'gamma.gamma.(Intercept)'])*5
+      betad_mean <- abs(df_freqdir$`unlist(coef(fit))`[df_freqdir$param != 'gamma.gamma.(Intercept)'])*5
 
       print('Using empirical bayes to estimate dispersion')
     }
@@ -379,9 +379,9 @@ def_priors.Village <- function(village) {
                          phi_r_var = 5,
                          theta_mean = phi_intercept,
                          theta_var = 2,
-                         beta0_var = 1,
-                         beta_var= 2,
-                         beta_treat_var = 0.5)
+                         beta_var = 1,
+                         tau_g_var= 2,
+                         tau_d_var = 0.5)
   prnames <- names(default_priors)
 
 
@@ -425,18 +425,18 @@ modelversion.Village <- function(village) {
                          D=village$num_donors,
                          R=village$num_reps,
                          P=village$P,
-                         time_indx=village$time_indx,
+                         x_t=village$time_indx,
                          rep_indx= village$rep_indx,
-                         X=village$X,
-                         T0 = village$T0,
+                         z_d=village$z_d,
+                         alpha = village$T0,
                          Y=village$Y,
                          phi_mean=village$priors[['phi_mean']],
                          phi_var=village$priors[['phi_var']],
                          phi_r_var=village$priors[['phi_r_var']],
                          theta_mean=village$priors[['theta_mean']],
                          theta_var=village$priors[['theta_var']],
-                         beta0_var=village$priors[['beta0_var']],
-                         beta_var= village$priors[['beta_var']])
+                         beta_var=village$priors[['beta_var']],
+                         tau_g_var= village$priors[['tau_g_var']])
 
   if (length(village$treatcol) == 0) {
     village$stan <- "
@@ -445,10 +445,10 @@ modelversion.Village <- function(village) {
               int<lower=0> D; // # of donors
               int<lower=0> R; // # of replicates
               int<lower=0> P; // # of predictors
-              vector[N] time_indx; // time(psg) indx across all samples
+              vector[N] x_t; // time(psg) indx across all samples
               array[N] int<lower=0> rep_indx; // replicate index for pooled technical noise parameter phi
-              matrix[D*N,P] X; // predictors
-              matrix[N,D] T0; // time 0 representaton values
+              matrix[D*N,P] z_d; // predictors
+              matrix[N,D] alpha; // time 0 representaton values
               matrix[N,D] Y; // response variable: donor representation matrix
 
               // Set priors
@@ -461,8 +461,8 @@ modelversion.Village <- function(village) {
               real theta_var;
 
               // growthrate priors
-              real beta0_var;
               real beta_var;
+              real tau_g_var;
           }
 
           parameters {
@@ -472,9 +472,9 @@ modelversion.Village <- function(village) {
               vector[R] phi_r; // time effect on technical variation partially pooled by replicate
 
               // growthrate params
-              vector[D-1] beta0_raw; // untransformed donor baseline proliferation effect
-              matrix[P-1, 1] beta; // donor covariates
-              real<lower=0> beta0_rawvar; // beta0 variance
+              vector[D-1] beta_raw; // untransformed donor baseline proliferation effect
+              matrix[P-1, 1] tau_g; // donor covariates
+              real<lower=0> beta_rawvar; // beta variance
           }
           transformed parameters {
               // partially pooling technical variation slope by replicate
@@ -487,16 +487,16 @@ modelversion.Village <- function(village) {
               vector[N] exptheta;
 
               for (n in 1:N){
-                exptheta[n] = exp(theta0 + time_indx[n] * vphi_r[n]);
+                exptheta[n] = exp(theta0 + x_t[n] * vphi_r[n]);
               }
 
               // Set baseline donor
-              vector[D] beta0;
-              beta0[D] = 0.0;
+              vector[D] beta;
+              beta[D] = 0.0;
 
               // transform growth rates to include baseline donor
               for (d in 1:(D-1)) {
-                  beta0[d] = beta0_raw[d];
+                  beta[d] = beta_raw[d];
               }
           }
           model {
@@ -508,31 +508,31 @@ modelversion.Village <- function(village) {
                 phi_r[r] ~ normal(phi, phi_r_var);
               }
 
-              beta0_rawvar ~ cauchy(0,beta0_var);
+              beta_rawvar ~ cauchy(0,beta_var);
 
               // sample donor growth rates
               for(d in 1:(D-1)) {
-                  beta0_raw[d] ~ normal(0, beta0_rawvar);
+                  beta_raw[d] ~ normal(0, beta_rawvar);
                 }
 
               // sample donor covariate effects
               if(P > 1) {
                   for(i in 1:P-1){
-                      beta[i,1] ~ cauchy(0, beta_var);
+                      tau_g[i,1] ~ cauchy(0, tau_g_var);
                   }
               }
 
               // likelihood
               for(n in 1:N){
-                  vector[D] logits;
+                  vector[D] eta;
                   for(d in 1:D) {
                       if(P > 1){
-                          logits[d] = T0[n,d] + time_indx[n] * (beta0[d] + X[d +(n-1)*D,2:P] * beta[,1]);
+                          eta[d] = alpha[n,d] + x_t[n] * (beta[d] + z_d[d +(n-1)*D,2:P] * tau_g[,1]);
                       } else {
-                          logits[d] = T0[n,d] + time_indx[n] * beta0[d];
+                          eta[d] = alpha[n,d] + x_t[n] * beta[d];
                       }
                   }
-                  transpose(Y[n,]) ~ dirichlet(softmax(logits) * exptheta[n]);
+                  transpose(Y[n,]) ~ dirichlet(softmax(eta) * exptheta[n]);
               }
           }
 
@@ -544,17 +544,17 @@ modelversion.Village <- function(village) {
                 matrix[D,N] post_prck; // posterior predictive check
                 // matrix[D,N] post_pred; // posterior predictions (given covariates estimate obsv)
                 for(n in 1:N){
-                    vector[D] logits;
-                    // vector[D] logits_pp;
+                    vector[D] eta;
+                    // vector[D] eta_pp;
                     for(d in 1:D) {
                         if(P > 1){
-                            logits[d] = T0[n,d] + time_indx[n] * (beta0[d] + X[d +(n-1)*D,2:P] * beta[,1]);
+                            eta[d] = alpha[n,d] + x_t[n] * (beta[d] + z_d[d +(n-1)*D,2:P] * tau_g[,1]);
                         } else {
-                            logits[d] = T0[n,d] + time_indx[n] * beta0[d];
+                            eta[d] = alpha[n,d] + x_t[n] * beta[d];
                         }
                     }
-                    post_prck[,n] = dirichlet_rng(softmax(logits) * exptheta[n]);
-                // post_pred[,n] = dirichlet_rng(softmax(logits_pp) * exptheta[1,n]);
+                    post_prck[,n] = dirichlet_rng(softmax(eta) * exptheta[n]);
+                // post_pred[,n] = dirichlet_rng(softmax(eta_pp) * exptheta[1,n]);
                 }
             }
 
@@ -562,18 +562,18 @@ modelversion.Village <- function(village) {
     }
   } else {
     print('Running model with donor specific treatment effects')
-    village$inputs <- c(village$inputs, beta_treat_var=village$priors[['beta_treat_var']])
+    village$inputs <- c(village$inputs, tau_d_var=village$priors[['tau_d_var']])
 
     village$stan <- "
             data {
-                int<lower=0> N; // num samples
-                int<lower=0> D; // num donors
-                int<lower=0> R; // num replicates
-                int<lower=0> P; // num predictors
-                vector[N] time_indx; // time(psg) indx across all samples
+                int<lower=0> N; // number samples
+                int<lower=0> D; // number donors
+                int<lower=0> R; // number replicates
+                int<lower=0> P; // number predictors
+                vector[N] x_t; // time(psg) indx across all samples
                 array[N] int<lower=0> rep_indx; // replicate index for pooled technical noise parameter phi
-                matrix[D*N,P] X; // predictors
-                matrix[N,D] T0; // time 0 representaton values
+                matrix[D*N,P] z_d; // predictors
+                matrix[N,D] alpha; // time 0 representaton values
                 matrix[N,D] Y; // response variable: donor representation matrix
 
                 // Set priors
@@ -586,9 +586,9 @@ modelversion.Village <- function(village) {
                 real theta_var;
 
                 // growthrate priors
-                real beta0_var;
                 real beta_var;
-                real beta_treat_var;
+                real tau_g_var;
+                real tau_d_var;
             }
 
             parameters {
@@ -598,10 +598,10 @@ modelversion.Village <- function(village) {
                 vector[R] phi_r; // time effect on technical variation partially pooled by replicate
 
                 // growthrate params
-                vector[D-1] beta0_raw; // untransformed donor growth rates
-                matrix[P-2, 1] beta; // growth covariates
-                real<lower=0> beta0_rawvar; // beta0 variance
-                vector[D] beta_treat_d; // treatment effect per donor
+                vector[D-1] beta_raw; // untransformed donor growth rates
+                matrix[P-2, 1] tau_g; // growth covariates
+                real<lower=0> beta_rawvar; // beta variance
+                vector[D] tau_d; // treatment effect per donor
 
             }
             transformed parameters {
@@ -615,16 +615,16 @@ modelversion.Village <- function(village) {
                 vector[N] exptheta;
 
                 for (n in 1:N){
-                  exptheta[n] = exp(theta0 + time_indx[n] * vphi_r[n]);
+                  exptheta[n] = exp(theta0 + x_t[n] * vphi_r[n]);
                 }
 
                 // Set baseline donor
-                vector[D] beta0;
-                beta0[D] = 0.0;
+                vector[D] beta;
+                beta[D] = 0.0;
 
                 // transform growth rates to include baseline donor
                 for (d in 1:(D-1)) {
-                    beta0[d] = beta0_raw[d];
+                    beta[d] = beta_raw[d];
                 }
             }
             model {
@@ -637,36 +637,36 @@ modelversion.Village <- function(village) {
                 }
 
                 // baseline donor proliferation
-                beta0_rawvar ~ cauchy(0,beta0_var);
+                beta_rawvar ~ cauchy(0,beta_var);
 
                 // sample donor baeline proliferation effect
                 for(d in 1:(D-1)) {
-                    beta0_raw[d] ~ normal(0, beta0_rawvar);
+                    beta_raw[d] ~ normal(0, beta_rawvar);
                   }
 
                 // sample donor covariate effects
                 if (P > 2) {
                     for(i in 1:P-2){
-                        beta[i,1] ~ cauchy(0, beta_var);
+                        tau_g[i,1] ~ cauchy(0, tau_g_var);
                     }
                 }
 
                 // sample treatment effects
                 for(d in 1:(D)) {
-                    beta_treat_d[d] ~ cauchy(0, beta_treat_var);
+                    tau_d[d] ~ cauchy(0, tau_d_var);
                 }
 
                 // likelihood
                 for(n in 1:N){
-                    vector[D] logits;
+                    vector[D] eta;
                     for(d in 1:D) {
                         if(P < 3){
-                            logits[d] = T0[n,d] + time_indx[n] * (beta0[d] + X[d +(n-1)*D,2] * beta_treat_d[d]);
+                            eta[d] = alpha[n,d] + x_t[n] * (beta[d] + z_d[d +(n-1)*D,2] * tau_d[d]);
                         } else {
-                            logits[d] = T0[n,d] + time_indx[n] * (beta0[d] + X[d +(n-1)*D,2] * beta_treat_d[d] + X[d +(n-1)*D,3:P] * beta[,1]);
+                            eta[d] = alpha[n,d] + x_t[n] * (beta[d] + z_d[d +(n-1)*D,2] * tau_d[d] + z_d[d +(n-1)*D,3:P] * tau_g[,1]);
                         }
                     }
-                    transpose(Y[n,]) ~ dirichlet(softmax(logits) * exptheta[n]);
+                    transpose(Y[n,]) ~ dirichlet(softmax(eta) * exptheta[n]);
                 }
             }
           "
@@ -677,17 +677,17 @@ modelversion.Village <- function(village) {
                           matrix[D,N] post_prck; // posterior predictive check
                           // matrix[D,N] post_pred; // posterior predictions (given covariates estimate obsv)
                           for(n in 1:N){
-                              vector[D] logits;
-                              // vector[D] logits_pp;
+                              vector[D] eta;
+                              // vector[D] eta_pp;
                               for(d in 1:D) {
                                   if(P < 3){
-                                      logits[d] = T0[n,d] + time_indx[n] * (beta0[d] + X[d +(n-1)*D,2] * beta_treat_d[d]);
+                                      eta[d] = alpha[n,d] + x_t[n] * (beta[d] + z_d[d +(n-1)*D,2] * tau_d[d]);
                                   } else {
-                                      logits[d] = T0[n,d] + time_indx[n] * (beta0[d] + X[d +(n-1)*D,2] * beta_treat_d[d] + X[d +(n-1)*D,3:P] * beta[,1]);
+                                      eta[d] = alpha[n,d] + x_t[n] * (beta[d] + z_d[d +(n-1)*D,2] * tau_d[d] + z_d[d +(n-1)*D,3:P] * tau_g[,1]);
                                   }
                               }
-                           post_prck[,n] = dirichlet_rng(softmax(logits) * exptheta[n]);
-                          // post_pred[,n] = dirichlet_rng(softmax(logits_pp) * exptheta[1,n]);
+                           post_prck[,n] = dirichlet_rng(softmax(eta) * exptheta[n]);
+                          // post_pred[,n] = dirichlet_rng(softmax(eta_pp) * exptheta[1,n]);
                           }
                       }
 
@@ -739,9 +739,9 @@ growthmetric.Village <- function(village) {
 
   if (village$num_donorcov > 0) {
     if (length(village$treatcol) > 0) {
-      df_donor <- cbind(df_donor, village$X[,-1:-2])
+      df_donor <- cbind(df_donor, village$z_d[,-1:-2])
     } else {
-      df_donor <- cbind(df_donor, village$X[,-1])
+      df_donor <- cbind(df_donor, village$z_d[,-1])
     }
 
     colnames(df_donor)[3:ncol(df_donor)] <- village$donorcov
@@ -749,17 +749,17 @@ growthmetric.Village <- function(village) {
   df_donor <- df_donor |>
     dplyr::distinct(across(all_of(colnames(df_donor))))
 
-  df <- data.frame(beta0=village$summary_params$mean[startsWith(village$summary_params$paramname, 'beta0[')],
-                   donorid= village$summary_params$paramname[startsWith(village$summary_params$paramname, 'beta0[')])
+  df <- data.frame(beta=village$summary_params$mean[startsWith(village$summary_params$paramname, 'beta[')],
+                   donorid= village$summary_params$paramname[startsWith(village$summary_params$paramname, 'beta[')])
   df$donorid <- df$donorid |> str_remove('.*\\[') |> str_remove('\\]') |> as.integer()
 
   df <- merge(df_donor, df, by='donorid')
-  df$gr_control <- df$beta0
+  df$gr_control <- df$beta
 
   if(village$num_donorcov > 0){
     for (d in 1:length(village$donorcov)) {
       df[, paste0('dcov_', village$donorcov[d])] <-
-        village$summary_params$mean[startsWith(village$summary_params$paramname, paste0('beta[', d, ',1]'))]
+        village$summary_params$mean[startsWith(village$summary_params$paramname, paste0('tau_g[', d, ',1]'))]
       df$gr_control <- df$gr_control + df[, paste0('dcov_', village$donorcov[d])] * df[, paste0(village$donorcov[d])]
     }
   }
@@ -787,32 +787,32 @@ growthmetric.Village <- function(village) {
   return(village)
 }
 
-#' Extract draws
+#' Extract draws for eta
 #'
-#' Internal generic function that extracts donor specific parameter draws for plotting and significance testing.
+#' Internal generic function that extracts donor specific proliferation effect parameter draws for plotting and significance testing.
 #'
 #' @param village A Village object.
-#' @return A list of draws data frames (for control and optional treatment donor specific parameters).
+#' @return A list of draws data frames (for control (beta) and optional treatment (tau_d) donor specific parameters).
 #' @keywords internal
-extractbeta <- function(village) {
-  UseMethod("extractbeta")
+extract_eta <- function(village) {
+  UseMethod("extract_eta")
 }
-#' @exportS3Method extractbeta Village
-extractbeta.Village <- function(village) {
+#' @exportS3Method extract_eta Village
+extract_eta.Village <- function(village) {
   df_cont <- rstan::extract(village$fit,
-                            pars= village$summary_params$paramname[startsWith(village$summary_params$paramname, 'beta0[')],
+                            pars= village$summary_params$paramname[startsWith(village$summary_params$paramname, 'beta[')],
                             permuted=FALSE) |>  as.data.frame()
   df_cont <- pivot_longer(df_cont, cols=1:ncol(df_cont))
   df_cont$donorid <- stringr::str_remove(df_cont$name, '.*\\[') |>  str_remove("\\]") |>  as.numeric()
-  df_cont$name <- 'beta_control'
+  df_cont$name <- 'beta'
 
   if (length(village$treatcol) != 0) {
     df_treat <- rstan::extract(village$fit,
-                               pars= village$summary_params$paramname[startsWith(village$summary_params$paramname,'beta_treat')],
+                               pars= village$summary_params$paramname[startsWith(village$summary_params$paramname,'tau_d')],
                                permuted=FALSE) |>  as.data.frame()
     df_treat <- pivot_longer(df_treat, cols=1:ncol(df_treat))
     df_treat$donorid <- stringr::str_remove(df_treat$name, '.*\\[') |>  str_remove("\\]") |>  as.numeric()
-    df_treat$name <- paste0('beta_', village$treatment)
+    df_treat$name <- paste0('tau[d,', village$treatment, ']')
 
     df_all <- rbind(df_cont,df_treat)
     rtrnlst <- list(df_all, df_treat, df_cont)

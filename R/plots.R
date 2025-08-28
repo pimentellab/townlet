@@ -1,4 +1,4 @@
-#' Plot all model parameters and growth rates
+#' Plot all model parameters and proliferation effects
 #'
 #' Internal generic function to plot proliferation and dispersion model parameters.
 #'
@@ -11,7 +11,7 @@ plot_params <- function(village) {
 #' @exportS3Method plot_params Village
 plot_params.Village <- function(village) {
 
-  df_all <- extractbeta(village)
+  df_all <- extract_eta(village)
   if (length(village$treatcol) != 0) {
     df_treat <- df_all[[2]]
     df_cont <- df_all[[3]]
@@ -52,9 +52,9 @@ plot_params.Village <- function(village) {
   highci <- 1-lowci
 
   # Plot betas
-  plot_betas(village, lowci, highci, df_all, df_donor)
+  plot_eta(village, lowci, highci, df_all, df_donor)
 
-  # Plot donor covariates and return samples df for growth rate plot
+  # Plot donor covariates and return samples df for proliferation effect plot
   if(length(village$donorcov) > 0){
     df_dcov <- plot_donorcov(village, lowci, highci)[[2]]
     df_dcov$chain <- df_dcov$name |>
@@ -72,7 +72,7 @@ plot_params.Village <- function(village) {
   # Plot technical variation parameters
   plot_overdispersion(village, lowci, highci)
 
-  # Plot growth rates
+  # Plot proliferation effects
   if (length(village$treatcol) != 0) {
     data <- plot_growthmetric(village, lowci, highci, df_treat, df_cont, df_donor, df_dcov, returnboth=TRUE)
     if (village$num_donorcov > 0) {
@@ -285,7 +285,8 @@ plot_ESS.Village <- function(village) {
     geom_point() +
     theme_classic() +
     ylim(0, max(ESS$n_eff)) +
-    theme(axis.text.x = element_text(angle=90))
+    theme(axis.text.x = element_text(angle=90),
+          axis.title.x = element_blank())
 
   ggsave(paste0(village$outdir, village$name, '_ESS.png'), width = pltwidth, height =4, units = 'in')
 }
@@ -386,7 +387,7 @@ plot_donorcov <- function(village, lowci, highci) {
 #' @exportS3Method plot_donorcov Village
 plot_donorcov.Village <- function(village, lowci, highci) {
   df <- rstan::extract(village$fit,
-                       pars= village$summary_params$paramname[startsWith(village$summary_params$paramname, 'beta[')],
+                       pars= village$summary_params$paramname[startsWith(village$summary_params$paramname, 'tau_g[')],
                        permuted=FALSE) |> as.data.frame()
   df <- pivot_longer(df, cols=1:ncol(df))
   df$cov.id <- df$name |> stringr::str_remove('.*\\[') |>  str_remove(",.*") |> as.numeric()
@@ -401,7 +402,7 @@ plot_donorcov.Village <- function(village, lowci, highci) {
     geom_violin(aes(x=cov, y=value, fill=cov)) +
     geom_point(aes(x=cov, y=mean)) +
     geom_errorbar(aes(x=cov, ymin=low_ci, ymax=high_ci), width =0, lwd=0.4, , color='black') +
-    ylab('Growth effect') +
+    ylab('Proliferation effect') +
     xlab(NULL) +
     theme_classic() +
     theme(axis.text = element_text(size = 15),
@@ -505,7 +506,7 @@ plot_overdispersion.Village <- function(village, lowci, highci) {
   ggsave(paste0(village$outdir, village$name, '_phi_r.png'), bg = 'white', width = village$num_reps*0.5, height = 4, units = 'in')
 }
 
-## Plot violin of donor growth metric per treatment dose
+## Plot violin of donor proliferation effect per treatment dose
 #' Plot total proliferation effect
 #'
 #' Internal generic function to plot violin of total donor proliferation effect per treatment dose.
@@ -565,7 +566,7 @@ plot_growthmetric.Village <- function(village, lowci, highci, df_treat=NULL, df_
 
     df_lfsr_treat <- df_treat |> group_by(donor, donorid) |> summarise(lfsr=min(mean(value >= 0), mean(value <= 0)))
 
-    # calculate growth rate by treatment dose
+    # calculate proliferation effect by treatment dose
     for(d in 1:village$num_doses) {
       df_treat[, as.character(doses[d])] <- df_treat$control + df_treat$value * doses_scaled[d]
       if(village$num_donorcov > 0){
@@ -593,7 +594,7 @@ plot_growthmetric.Village <- function(village, lowci, highci, df_treat=NULL, df_
       geom_point(data=df_beta_stats, aes(x=donor, y=mean), size=1) +
       geom_errorbar(data=df_beta_stats, aes(x=donor, ymin=low_ci, ymax=high_ci), width =0, lwd=0.4, , color='black') +
       geom_hline(yintercept = 0, linetype = 'FF', lwd = 0.1, color='black') +
-      ylab(NULL) +
+      ylab('Total proliferation effect') +
       theme_classic() +
       facet_grid(rows = vars(Dose), cols=vars(Treatment), labeller= label_both) +
       theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = 'none')
@@ -649,7 +650,7 @@ plot_growthmetric.Village <- function(village, lowci, highci, df_treat=NULL, df_
       geom_point(data=df_beta_stats, aes(x=donor, y=mean), size=1) +
       geom_errorbar(data=df_beta_stats, aes(x=donor, ymin=low_ci, ymax=high_ci), width =0, lwd=0.4, , color='black') +
       geom_hline(yintercept = 0, linetype = 'FF', lwd = 0.1, color='black') +
-      ylab('Total growth effect') +
+      ylab('Total proliferation effect') +
       theme_classic() +
       theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = 'none')
 
@@ -692,17 +693,17 @@ plot_growthmetric.Village <- function(village, lowci, highci, df_treat=NULL, df_
 #' @param df_donor Donor identification info
 #' @return None
 #' @keywords internal
-plot_betas <- function(village, lowci, highci, df_all, df_donor) {
-  UseMethod("plot_betas")
+plot_eta <- function(village, lowci, highci, df_all, df_donor) {
+  UseMethod("plot_eta")
 }
-#' @exportS3Method plot_betas Village
-plot_betas.Village <- function(village, lowci, highci, df_all, df_donor) {
+#' @exportS3Method plot_eta Village
+plot_eta.Village <- function(village, lowci, highci, df_all, df_donor) {
   df_beta_stats <- df_all |> group_by(donor, donorid, name) |> summarise(mean=mean(value), median=median(value),
                                                                            low_ci=quantile(value, probs = c(lowci)),
                                                                            high_ci=quantile(value, probs = c(highci)),
                                                                            .groups = "keep")
-  donor_order <- df_beta_stats$donor[df_beta_stats$name == 'beta_control' & order(df_beta_stats$mean)]
-  donor_order <- df_beta_stats$donor[df_beta_stats$name == 'beta_control'][order(df_beta_stats$mean[df_beta_stats$name == 'beta_control'])]
+  donor_order <- df_beta_stats$donor[df_beta_stats$name == 'beta' & order(df_beta_stats$mean)]
+  donor_order <- df_beta_stats$donor[df_beta_stats$name == 'beta'][order(df_beta_stats$mean[df_beta_stats$name == 'beta'])]
 
 
   df_all$donor <- factor(df_all$donor, levels=donor_order)
@@ -710,7 +711,7 @@ plot_betas.Village <- function(village, lowci, highci, df_all, df_donor) {
   df_beta_stats$donor <- factor(df_beta_stats$donor, levels=donor_order)
 
   df_beta_stats$point <- 23
-  df_beta_stats$point[df_beta_stats$low_ci < 0 & df_beta_stats$high_ci >0 | df_beta_stats$name == 'beta_control'] <- 16
+  df_beta_stats$point[df_beta_stats$low_ci < 0 & df_beta_stats$high_ci >0 | df_beta_stats$name == 'beta'] <- 16
 
   pltwidth <- 0.2*village$num_donors
 
@@ -719,7 +720,7 @@ plot_betas.Village <- function(village, lowci, highci, df_all, df_donor) {
     geom_point(data=df_beta_stats, aes(x=donor, y=mean, shape=as.factor(point)), shape=df_beta_stats$point, size=1) +
     geom_errorbar(data=df_beta_stats, aes(x=donor, ymin=low_ci, ymax=high_ci), width =0, lwd=0.4, , color='black') +
     geom_hline(yintercept = 0, linetype = 'FF', lwd = 0.1, color='black') +
-    ylab(NULL) +
+    ylab('Proliferation effect') +
     theme_classic() +
     facet_grid(rows = vars(name), labeller= label_parsed) +
     theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = 'none')
@@ -727,5 +728,5 @@ plot_betas.Village <- function(village, lowci, highci, df_all, df_donor) {
   if(is.null(village$color) == FALSE) {
     p <- p + scale_fill_manual(values= village$color)
   }
-  ggsave(paste0(village$outdir, village$name, '_betas.png'), bg = 'white', width = pltwidth, height = 4, units = 'in')
+  ggsave(paste0(village$outdir, village$name, '_eta_params.png'), bg = 'white', width = pltwidth, height = 4, units = 'in')
 }
