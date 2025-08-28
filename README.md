@@ -49,17 +49,17 @@ The following function must be be run first to check that the data is in the cor
 library(townlet)
 
 # Initiate village object
-village <- init_village(datapath,              # Path to compositional data .csv file
-                        outdir= './',          # Townlet output directory to save RDS files and plots
-                        name='test_townlet',   # Name of analysis (will be used in output directory/file names) 
-                        model=NULL,            # Define generalized linear model
+village <- init_village(datapath,              # composition data filepath (.csv)
+                        outdir= './',          # output directory
+                        name='test_townlet',   # File name prefix 
+                        model=NULL,            # Define linear model
                         alldonors=TRUE,        # Include all original donors
                         normalize=FALSE,       # Compositional data must sum to 1. If removing a donor set to normalize=TRUE to renormalize. 
                         cls=NULL,              # Colors to use for each donor
-                        T0_cutoff=NULL,        # Remove donors from analysis with very low representation at time 0 (below cutoff set here). 
+                        T0_cutoff=NULL,        # Remove donors from analysis with very low representation at time 0  
                         sim=FALSE,             # If using model for simulated data set to sim=TRUE to only save model fit (no plots). 
                         timeunit='days',       # Time unit of experiment (e.g. days, cell passages, etc.)
-                        baseline=NULL,         # Baseline donor to use
+                        baseline=NULL,         # Set baseline donor
                         ebayes=TRUE)           # Use empirical bayes approach to estimate dispersion (reccomended). If ebayes=TRUE a dispersion prior will be set instead of learned from the data.
 ```
 
@@ -67,7 +67,7 @@ village <- init_village(datapath,              # Path to compositional data .csv
 
 Defining townlet linear model
 ___
-Townlet can model both treatment-specific donor relative proliferation rates and test for significant groupwise effects based on user provided donor covariates (e.g. sex, ancestry, genetics, disease status, biological phenotype, etc.)
+Townlet can model both treatment-specific donor relative proliferation and test for significant groupwise effects (e.g. sex, ancestry, genetics, disease status, biological phenotype, etc.)
 
 *1) Estimate donor proliferation in control conditions*
 
