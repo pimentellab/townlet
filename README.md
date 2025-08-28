@@ -100,7 +100,7 @@ Townlet will automatically choose a baseline donor and suggest alternative basel
 ```{r}
 
 village <- init_village(...)
-village <- readRDS('./filepath_to_townlet_name.RDS)
+village <- readRDS('./outdir/name.RDS)
 
 # check which baseline donor is set
 village$baseline
@@ -118,7 +118,7 @@ Do not choose the fastest or slowest growers in your village as the baseline gro
 
 *2) Choose a consistent grower*
 
-Sometimes donors in a village may have inconsistent growth proliferation across replicates and it is important to not choose these donors as the baseline (e.g. representation may sharply go up, then down, etc.). Instead try to choose a donor that consistently (linearly) increases or decreases in representation over time. You can run the init_village() and check the generated ‘rawdata_scatter.png’ plot to see if the chosen baseline donor has any inconsistencies. We also recommend checking the posterior predictive check plot (ppck_barplot.png) to make sure the training samples fall within the distributions for the baseline donor. If not, consider testing an alternative median grower.   
+Sometimes donors in a village may have inconsistent proliferation across time points and it is important to not choose these donors as the baseline (e.g. representation may sharply go up, then down, etc.). Instead try to choose a donor that consistently (linearly) increases or decreases in representation over time. You can run the init_village() and check the generated ‘rawdata_scatter.png’ plot to see if the chosen baseline donor has any inconsistencies. We also recommend checking the posterior predictive check plot (ppck_barplot.png) to make sure the training samples fall within the distributions for the baseline donor. If not, consider testing an alternative median grower.   
 
 *3) Avoid donors that are from imbalanced groups*
 
@@ -132,7 +132,7 @@ Once village object is successfully initiated the model can be run using the fol
 
 ```{r}
 village <- run_townlet(village,                # Village initiated using init_village()
-                       cores=1,                # Number of cores for sampler
+                       cores=1,                # Number of cores
                        samples=2e4,            # Number of samples (including warmup)
                        warmup=1e4,             # Number of warmup samples
                        chains=4,               # Number of sample chains
