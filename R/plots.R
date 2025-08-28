@@ -572,9 +572,9 @@ plot_growthmetric.Village <- function(village, lowci, highci, df_treat=NULL, df_
         for(dc in 1:length(dcov)) {
           df_treat[, as.character(doses[d])] <- df_treat[, as.character(doses[d])] + df_treat[,dcov[dc]] * df_treat[,paste0(village$donorcols[dc], '_pred')]
         }
-      }
       if (length(interaction_term) > 0){
         df_treat[, as.character(doses[d])] <- df_treat[, as.character(doses[d])] + df_treat[,dcov[str_detect(dcov, dinteract)]] * df_treat[,paste0(interaction_term, '_pred')] * doses_scaled[d]
+      }
       }
     }
     df_treat$Treatment <- village$treatment
