@@ -149,7 +149,7 @@ Townlet will output the following files:
 - [modelname].RDS – Townlet results and model specifications
 
 *Biological Parameter Plots*
-- [modelname]_betas.png – Proliferation/treatment effect distributions by donor
+- [modelname]_eta_params.png – Proliferation/treatment effect distributions by donor
 - [modelname]_growthrates.png – Dose-specific proliferation effect distributions per donor
 - [modelname]_regressors.png – Donor covariate effect distributions
 
@@ -175,7 +175,7 @@ Donors with proliferation effect distribution 95% credible intervals above zero 
 
 *Test for significant donor group proliferation effects*
 
-We can test if donor covariates influence village proliferation rates. Below is a plot of our deletion donor status effect on proliferation from our village experiment (see townlet citation). Since our fitted deletion parameter's 95% credible interval falls above zero there is evidence to suggest that deletion individuals have faster proliferation rates in our village experiment ([local false sign rate](https://academic.oup.com/biostatistics/article/18/2/275/2557030), lfsr = ). We recommend using a standard lfsr <0.05 to determine signicant donor covariate effects (similar to p-value interpretation). Significant donor treatment effects can also be determined using this lfsr threshold. 
+We can test if donor covariates influence village proliferation rates. Below is a plot of our deletion donor status effect on proliferation from our village experiment (see townlet citation). Since our fitted deletion parameter's 95% credible interval falls above zero and the parameters local false sign rate (lfsr < 0.05, check village$df_lfsr) there is evidence to suggest that deletion individuals have faster proliferation rates in our village experiment. We recommend using a standard lfsr <0.05 to determine signicant donor covariate effects. Significant donor treatment effects can also be determined using this lfsr threshold. 
 
 <img src="images/census_16p11_d23p3t7r3_del_regressors.png" alt="donor covariates" width="100"/>
 
