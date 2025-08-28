@@ -167,6 +167,44 @@ Townlet will output the following files:
 
 ### Step 3: Interpret results
 
+*Donor proliferation effects*
+
+Donors with proliferation effect distribution 95% credible intervals above zero represent donors that grow significantly faster than the median baseline donor and donors with credible intervals less than zero are slower (e.g., In the plot below NFID is the fastest in the village. Dots represent mean of distribution with 95% credible interval error bars.) The mean proliferation effects can be used for downstream genome wide genetic analysis (see townlet citations). 
+
+<img src="images/census_16p11_d23p3t7r3_del_growthrates.png" alt="total proliferation effects" width="500"/>
+
+*Test for significant donor group proliferation effects*
+
+We can test if donor covariates influence village proliferation rates. Below is a plot of our deletion donor status effect on proliferation from our village experiment (see townlet citation). Since our fitted deletion parameter's 95% credible interval falls above zero there is evidence to suggest that deletion individuals have faster proliferation rates in our village experiment ([local false sign rate](https://academic.oup.com/biostatistics/article/18/2/275/2557030), lfsr = ). We recommend using a standard lfsr <0.05 to determine signicant donor covariate effects (similar to p-value interpretation). Significant donor treatment effects can also be determined using this lfsr threshold. 
+
+<img src="images/census_16p11_d23p3t7r3_del_regressors.png" alt="donor covariates" width="100"/>
+
+```{r}
+# View lfsr of donor covariates
+village$df_lfsr
+
+# View lfsr of treatment effects
+village$df_lfsr_treat
+
+# View total donor proliferation effects by treatment dose for downstream analysis
+village$df_growtheffect
+```
+
+*Double check model diagnostics*
+
+It is a good idea to check model diagnostics. If any of these threshold are not met double check data inputs and consider model choice carefully. If you have limited replication and/or a lot of technical variation in your village experiment overly complex models may not fit well! 
+
+```{r}
+# Should return zero, if not interpret results with caution, double check input data format
+village$num_divergent
+
+# Should be > 0.3
+village$bfmi
+
+# >95% of our original samples falling within the 95% credible interval means model fit well
+village$ppck_ratio
+
+```
 
 
 
