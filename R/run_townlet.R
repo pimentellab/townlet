@@ -19,7 +19,7 @@
 #' \dontrun{
 #'   test_village <- run_townlet(test_village)
 #' }
-run_townlet <- function(village, cores=1, samples=2e4, warmup=1e4, chains=4, credinterval=0.95, ppck=TRUE, priors=NULL, comp=1) {
+run_townlet <- function(village, cores=1, samples=2e3, warmup=1e3, chains=4, credinterval=0.95, ppck=TRUE, priors=NULL, comp=1) {
   UseMethod("run_townlet")
 }
 #' @exportS3Method run_townlet Village
@@ -767,22 +767,25 @@ growthmetric.Village <- function(village) {
   if(length(village$treatcol) == 1){
     dosescaled <- unique(village$data$treatment_scaled)
     doses <- village$doses[order(village$doses)]
-    df_treat <- data.frame(beta_treat=village$summary_params$mean[startsWith(village$summary_params$paramname, 'beta_treat')],
-                           donorid= village$summary_params$paramname[startsWith(village$summary_params$paramname, 'beta_treat')])
+    df_treat <- data.frame(tau_d=village$summary_params$mean[startsWith(village$summary_params$paramname, 'tau_d')],
+                           donorid= village$summary_params$paramname[startsWith(village$summary_params$paramname, 'tau_d')])
     df_treat$donorid <- df_treat$donorid |> str_remove('.*\\[') |> str_remove('\\]') |> as.integer()
 
     df <- merge(df, df_treat, by='donorid')
     for (d in 1:village$num_doses) {
-      df[, paste0('gr_', village$treatment, '_dose', doses[d])] <- df$gr_control + df$beta_treat * dosescaled[d]
+      df[, paste0('eta_', village$treatment, '_dose', doses[d])] <- df$gr_control + df$tau_d * dosescaled[d]
       if(doses[d] > 0) {
-        df[, paste0('beta_', village$treatment, '_dose', doses[d])] <- df$beta_treat * dosescaled[d]
+        df[, paste0('beta_', village$treatment, '_dose', doses[d])] <- df$tau_d * dosescaled[d]
       }
     }
-    village$df_growtheffect <- df[, c('donor', 'donorid', colnames(df)[startsWith(colnames(df), paste0('gr_', village$treatment))])]
+    village$df_proliferation <- df[, c('donor', 'donorid', 'tau_d', colnames(df)[startsWith(colnames(df), paste0('eta_', village$treatment))])]
+
   } else {
-    village$df_growtheffect <- df |>
+    village$df_proliferation <- df |>
       select(donor, donorid, starts_with('gr_')) |>
       distinct()
+
+    names(village$df_proliferation)[names(village$df_proliferation) == "gr_control"] <- "eta"
   }
   return(village)
 }
