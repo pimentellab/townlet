@@ -100,7 +100,6 @@ Townlet will automatically choose a baseline donor and suggest alternative basel
 ```{r}
 
 village <- init_village(...)
-village <- readRDS('./outdir/name.RDS)
 
 # check which baseline donor is set
 village$baseline
@@ -187,7 +186,7 @@ village$df_lfsr
 village$df_lfsr_treat
 
 # View total donor proliferation effects by treatment dose for downstream analysis
-village$df_growtheffect
+village$df_proliferation
 ```
 
 *Double check model diagnostics*
