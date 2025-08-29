@@ -76,17 +76,16 @@ plot_params.Village <- function(village) {
   if (length(village$treatcol) != 0) {
     data <- plot_growthmetric(village, lowci, highci, df_treat, df_cont, df_donor, df_dcov, returnboth=TRUE)
     if (village$num_donorcov > 0) {
-      village$df_lfsr_treat <- data[[4]]
-    } else {
       village$df_lfsr_treat <- data[[3]]
+    } else {
+      village$df_lfsr_treat <- data[[2]]
     }
   } else {
     data <- plot_growthmetric(village, lowci, highci, df_treat=NULL, df_cont, df_donor, df_dcov, returnboth=TRUE)
   }
 
-  village$df_growth <- data[[2]]
   if(village$num_donorcov > 0){
-    village$df_lfsr <- data[[3]]
+    village$df_lfsr <- data[[2]]
   }
 
   return(village)
@@ -665,15 +664,15 @@ plot_growthmetric.Village <- function(village, lowci, highci, df_treat=NULL, df_
   if(returnboth == TRUE) {
     if(exists('df_lfsr_treat')) {
       if(village$num_donorcov > 0) {
-        return(list(p, df, df_lfsr, df_lfsr_treat))
+        return(list(p, df_lfsr, df_lfsr_treat))
       } else {
-        return(list(p, df, df_lfsr_treat))
+        return(list(p, df_lfsr_treat))
       }
     } else {
       if(village$num_donorcov > 0) {
-        return(list(p, df, df_lfsr))
+        return(list(p, df_lfsr))
       } else {
-        return(list(p, df))
+        return(list(p))
       }
     }
   } else {
