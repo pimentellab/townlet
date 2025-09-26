@@ -20,7 +20,7 @@ Townlet uses [rstan](https://mc-stan.org/rstan/) to run inference. Please ensure
 
 ### Option 2: 
 
-<br><br>
+Docker coming soon!
 
 ## Submit a bug report
 
