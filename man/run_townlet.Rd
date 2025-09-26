@@ -7,8 +7,8 @@
 run_townlet(
   village,
   cores = 1,
-  samples = 20000,
-  warmup = 10000,
+  samples = 2000,
+  warmup = 1000,
   chains = 4,
   credinterval = 0.95,
   ppck = TRUE,

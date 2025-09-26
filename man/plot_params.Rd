@@ -2,7 +2,7 @@
 % Please edit documentation in R/plots.R
 \name{plot_params}
 \alias{plot_params}
-\title{Plot all model parameters and growth rates}
+\title{Plot all model parameters and proliferation effects}
 \usage{
 plot_params(village)
 }
