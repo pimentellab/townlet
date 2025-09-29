@@ -6,14 +6,14 @@
 test_townlet <- function() {
   # write temp data file
   data("testdata", package = "townlet")
-  TAF::mkdir('./test_townlet')
-  tmp_csv <- file.path("./test_townlet/df_temp.csv")
+  tmp_csv <- file.path("./data/df_temp.csv")
   write.csv(testdata, tmp_csv, row.names = FALSE)
 
   # test townlet
   village <- init_village(datapath = tmp_csv,
                           model = '~sex',
                           outdir = './',
+                          name = 'test_townlet'
   )
   village <- run_townlet(village = village,
                          cores = 4)
