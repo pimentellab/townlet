@@ -41,9 +41,9 @@ dependencies:
 Step 1: Install [Docker](https://www.docker.com/products/docker-desktop/)
 <br><br>
 Step 2: Move to working directory and pull docker image.
-```
+```bash
 cd path/to/working/dirctory
-# Docker image coming soon!
+docker pull ghcr.io/hansonch/townlet-rstudio:latest
 ```
 Step 3: Initiate docker session by running the following command
 ```
@@ -57,7 +57,7 @@ Then open following host link in browser (http://localhost:8787). Enter username
 Step 4: Test Townlet installation by running
 
 ```R
-setwd('./project')
+setwd('/home/rstudio/project')   # Set this working directory anytime you are running the docker image
 library(townlet)
 test_townlet()
 ```
