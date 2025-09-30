@@ -47,7 +47,10 @@ cd path/to/working/dirctory
 ```
 Step 3: Initiate docker session by running the following command
 ```
-docker run -it -p 8787:8787 -v "$(pwd)":/home/rstudio/project townlet-rstudio
+docker run -it -p 8787:8787 \
+  -v "$(pwd)":/home/rstudio/project \
+  -w /home/rstudio/project \
+  townlet-rstudio
 ```
 
 Then open following host link in browser (http://localhost:8787). Enter username = rstudio and the password provided by running command above. 
@@ -63,7 +66,7 @@ This will run Townlet on a simulated data set and will save fitted model and res
 
 Step 5: Run Townlet on your own village composition data 
 
-Note- if you are working in a docker container it can only see files and subdirectories that are in your current working directory. Make sure your village composition data is in the directory where you launch docker from and your filepath variables in all function calls are relative to your docker virtual environment filepath! See tutorial below for how to format data, run townlet and interpret results. 
+Note- if you are working in a docker virtual environment it can only see files and subdirectories in the location where you launched from. Make sure your village composition data is in the directory where you launch docker from and your filepath variables in all function calls are relative to your docker virtual environment filepath! See tutorial below for how to format data, run townlet and interpret results. 
 
 ## Submit a bug report
 
