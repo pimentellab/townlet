@@ -18,9 +18,51 @@
 ### Option 1: 
 Townlet uses [rstan](https://mc-stan.org/rstan/) to run inference. Please ensure that rstan is properly installed before installing townlet. 
 
-### Option 2: 
+Townlet was built with the following dependencies. 
 
-Docker coming soon!
+```yaml
+name: townlet
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - r-base=4.4.2
+  - r-rstan=2.32.6
+  - r-data.table=1.17.0
+  - r-dplyr=1.1.4
+  - r-ggh4x=0.3.0
+  - r-stringr=1.5.1
+  - r-tidyr=1.3.1
+  - r-remotes=2.5.0
+```
+
+### Option 2 (recommended): 
+
+Step 1: Install [Docker](https://www.docker.com/products/docker-desktop/)
+Step 2: Move to working directory and pull docker image.
+```
+cd path/to/working/dirctory
+# Docker image coming soon!
+```
+Step 3: Initiate docker session by running the following command
+```
+docker run -it -p 8787:8787 -v "$(pwd)":/home/rstudio/project townlet-rstudio
+```
+
+Then open following host link in browser (http://localhost:8787). Enter username = rstudio and the password provided by running command above. 
+
+Step 4: Test Townlet installation by running
+
+```R
+library(townlet)
+test_townlet()
+```
+
+This will run Townlet on a simulated data set and will save fitted model and results/diagnostic plots in your working directory. 
+
+Step 5: Run Townlet on your own village composition data 
+
+Note- if you are working in a docker container it can only see files and subdirectories that are in your current working directory. Make sure your village composition data is in the directory where you launch docker from and your filepath variables in all function calls are relative to your docker virtual environment filepath! See tutorial below for how to format data, run townlet and interpret results. 
 
 ## Submit a bug report
 
@@ -30,7 +72,9 @@ Submit a bug report here on GitHub as an issue or send an email to [hansonc@g.uc
 
 ## Cite townlet
 
-Please cite the following publication if you use townlet:
+Please cite the following preprint if you use townlet:
+
+[Cell villages and Dirichlet modeling map human cell fitness genetics](https://www.biorxiv.org/content/10.1101/2025.09.26.678880v1)
 
 <br><br>
 
