@@ -6,7 +6,7 @@
 test_townlet <- function() {
   # write temp data file
   data("testdata", package = "townlet")
-  tmp_csv <- file.path("./data/df_temp.csv")
+  tmp_csv <- file.path("./df_temp.csv")
   write.csv(testdata, tmp_csv, row.names = FALSE)
 
   # test townlet
@@ -19,7 +19,7 @@ test_townlet <- function() {
                          cores = 4)
 
   # Check that all files created
-  townlet_files <- files <- list.files("./test_townlet", full.names = TRUE)
+  townlet_files <- list.files("./test_townlet", full.names = TRUE)
 
   files <- c("./test_townlet/test_townlet_ESS.png",
              "./test_townlet/test_townlet_eta_params.png",
