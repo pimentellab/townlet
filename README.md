@@ -39,6 +39,7 @@ dependencies:
 ### Option 2 (recommended): 
 
 Step 1: Install [Docker](https://www.docker.com/products/docker-desktop/)
+<br><br>
 Step 2: Move to working directory and pull docker image.
 ```
 cd path/to/working/dirctory
