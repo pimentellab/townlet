@@ -49,7 +49,6 @@ Step 3: Initiate docker session by running the following command
 ```
 docker run -it -p 8787:8787 \
   -v "$(pwd)":/home/rstudio/project \
-  -w /home/rstudio/project \
   townlet-rstudio
 ```
 
@@ -58,6 +57,7 @@ Then open following host link in browser (http://localhost:8787). Enter username
 Step 4: Test Townlet installation by running
 
 ```R
+setwd('./project')
 library(townlet)
 test_townlet()
 ```
