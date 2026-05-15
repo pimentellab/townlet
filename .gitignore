@@ -4,3 +4,5 @@
 .httr-oauth
 .DS_Store
 .quarto
+townlet.yml
+data/df_temp.csv
