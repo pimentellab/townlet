@@ -51,8 +51,6 @@ init_village <- function(datapath, model=NULL, normalize=FALSE, outdir= './', na
   print('Checking data structure')
   village <- validate_village(village)
 
-
-
   if(is.null(village$color)) {
     cls <- c("#1B9E77", "#D95F02", "#7570B3", "#E7298A", "#66A61E", "#E6AB02", "#A6761D", "#666666")
     village$color <- rep(cls, length.out = village$num_donors)
@@ -177,8 +175,10 @@ validate_village.Village <- function(village) {
     if (dir.exists(village$outdir) == TRUE) {
       warning(paste0('Output files will be saved to existing directory (all existing files will be overwritten): ', village$outdir))
     } else {
-      dir.create(village$outdir, recursive = TRUE)
-      warning(paste('Creating out file directory:', paste0(village$outdir, village$name, '/')))
+      if (village$sim == FALSE) {
+        dir.create(village$outdir, recursive = TRUE)
+        warning(paste('Creating out file directory:', paste0(village$outdir)))
+      }
     }
   }
   if (!is.character(village$name) || length(village$name) != 1) {
@@ -259,6 +259,16 @@ validate_village.Village <- function(village) {
   }
 
   village$num_donorcov <- length(village$donorcov)
+
+
+  # Check for zeros in compositions
+  if(any(village$data$representation == 0)) {
+    sigma = min(min(village$data$representation), 0.002)
+    village$data$representation[village$data$representation == 0] = sigma
+    village$normalize = TRUE
+    warning("Zero values detected in composition data. Renormalizing data (Dirichlet requires all values >0).")
+  }
+
 
   if(village$sim == FALSE) {
     print('Setting baseline donor')
@@ -355,61 +365,71 @@ baseline_donor <- function(village) {
 #' @exportS3Method baseline_donor Village
 baseline_donor.Village <- function(village) {
 
-  # Define donors with median growth (alternative baseline donors)
-  df_meddonors <- village$data
-
-  ### Fix this later
-  if (length(village$treatcol) == 1) {
-
-    df_meddonors <- df_meddonors |>
-      filter(.data[[village$treatcol]] == 0)
-
-    result <- df_meddonors |>
-      group_by(replicate) |>
-      summarise(unique_times = list(unique(time))) |>
-      ungroup() |>
-      summarise(common_min = max(sapply(unique_times, min)))
-
-    df_meddonors <- df_meddonors |> group_by(donor, replicate, !!!syms(village$donorcols)) |>
-      summarise(gr=abs(representation[time == max(time)]-representation[time == result$common_min])) |>
-      ungroup()
-
-  } else {
-
-    result <- df_meddonors |>
-      group_by(replicate) |>
-      summarise(unique_times = list(unique(time))) |>
-      ungroup() |>
-      summarise(common_min = max(sapply(unique_times, min)))
-
-    df_meddonors <- df_meddonors |> group_by(donor, replicate, !!!syms(village$donorcols)) |>
-      summarise(gr=abs(representation[time == max(time)]-representation[time == result$common_min])) |>
-      ungroup()
-  }
-
-
-  df_meddonors <- df_meddonors |>
-    group_by(donor, !!!syms(village$donorcols)) |>
-    summarise(sumdiff= sum(gr)) |>
-    arrange(sumdiff)
-
-  med <- median(df_meddonors$sumdiff)
-
-  df_meddonors$median_gr <- abs(df_meddonors$sumdiff-med)
-  df_meddonors <- df_meddonors[order(df_meddonors$median_gr),]
-  village$alt_baseline <- df_meddonors$donor[1:10]
-
-  # Set default baseline donor and restructure data
   if(is.null(village$baseline)){
-    village$baseline <- df_meddonors$donor[1]
+    df = village$data
+
+    if (length(village$treatcol) == 1) {
+      df <- df |>
+        filter(.data[[village$treatcol]] == 0)
+    }
+
+    # Rank donors within each replicate × time
+    df_rank <- df  |>
+      group_by(replicate, time) |>
+      mutate(rank = rank(representation, ties.method = "average")) |>
+      ungroup()
+
+
+    # Compute median rank per donor across all replicates
+    median_ranks <- df_rank |>
+      group_by(donor) |>
+      summarize(median_rank = median(rank), .groups = "drop")
+
+    # Identify reference donors (across all covariates)
+    # Build covariate → code mapping
+    if (length(village$donorcols) != 0) {
+      cols <- setdiff(colnames(model.matrix(as.formula(village$model), data=df)), "(Intercept)")
+      donorcols <- village$donorcols
+
+      df_cov <- expand.grid(
+        covariate = donorcols,
+        col = cols,
+        stringsAsFactors = FALSE
+      ) |>
+        dplyr::mutate(
+          code = mapply(function(cov, cl) sub(paste0("^", cov), "", cl),
+                        covariate, col),
+          matched = col != code
+        ) |>
+        dplyr::filter(matched) |>
+        dplyr::select(covariate, code)
+
+      logic_mat <- sapply(seq_len(nrow(df_cov)), function(i) {
+        col <- df_cov$covariate[i]
+        code <- df_cov$code[i]
+        df[[col]] != code
+      })
+      logic_mat <- as.matrix(logic_mat)
+
+      cov0_donors <- df$donor[apply(logic_mat, 1, all)] |> unique()
+    } else {cov0_donors = unique(df$donor)}
+
+    # Select baseline donor (median-rank among reference donors)
+    village$baseline <- median_ranks |>
+      filter(donor %in% cov0_donors) |>
+      arrange(median_rank) |>
+      slice(ceiling(n() / 2)) |>
+      pull(donor)
   }
+
+  # Reorder data and reset donorid
   data_reset <- village$data[village$data$donor != village$baseline, ]
   data_reset <- data_reset |> group_by(donor) |> mutate(donorid=cur_group_id()) |> ungroup()
   village$data <- village$data[village$data$donor == village$baseline,]
   village$data$donorid <- village$num_donors
 
   village$data <- rbind(data_reset, village$data)
-  warning(paste('Set baseline donor to: ', village$baseline, '\n View alternative baseline donors run: village$alt_baseline'))
+  warning(paste('Set baseline donor to: ', village$baseline))
 
   return(village)
 }
