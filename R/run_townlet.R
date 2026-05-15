@@ -23,7 +23,7 @@ run_townlet <- function(village, cores=1, samples=2e3, warmup=1e3, chains=4, cre
   UseMethod("run_townlet")
 }
 #' @exportS3Method run_townlet Village
-run_townlet.Village <- function(village, cores=1, samples=2e4, warmup=1e4, chains=4, credinterval=0.95, ppck=TRUE, priors=NULL, comp=0) {
+run_townlet.Village <- function(village, cores=1, samples=2e3, warmup=1e3, chains=4, credinterval=0.95, ppck=TRUE, priors=NULL, comp=0) {
 
   ## Check if the object is of class "Village"
   if (!inherits(village, "Village")) {
@@ -76,12 +76,6 @@ run_townlet.Village <- function(village, cores=1, samples=2e4, warmup=1e4, chain
                                 cores = cores
     )})
 
-  if(village$sim == TRUE) {
-    print('Saving model fit')
-    filepath <- paste0(village$outdir, village$name, '_fit.RDS')
-    saveRDS(village$fit, filepath)
-  }
-
   print('Running model diagnostics')
   village$num_divergent <- rstan::get_num_divergent(village$fit)
   village$num_maxtreedepth <- rstan::get_num_max_treedepth(village$fit)
@@ -89,7 +83,6 @@ run_townlet.Village <- function(village, cores=1, samples=2e4, warmup=1e4, chain
 
   print(paste('Divergences:', village$num_divergent))
   print(paste('Tree depth:', village$num_maxtreedepth))
-  # rstan::check_hmc_diagnostics(village$fit)
   print(village$bfmi)
 
   print('Generating model summary statistics')
@@ -115,7 +108,6 @@ run_townlet.Village <- function(village, cores=1, samples=2e4, warmup=1e4, chain
     )
 
     print('Plotting posterior predictive checks')
-
     tryCatch(
       {village <- plot_ppck(village)},
       error = function(e) {
@@ -298,7 +290,7 @@ def_priors.Village <- function(village) {
       df <- village$data |> select(donor, time, replicate, representation)
       df$i <- 1
 
-      if(village$sim == FALSE & nrow(df[df$time ==0,]) != village$num_reps) {
+      if(village$sim == FALSE & length(unique(df$replicate[df$time == 0])) != village$num_reps) {
         df_0 <- dplyr::bind_rows(replicate(village$num_reps, df[df$time ==0,], simplify = FALSE))
         df_0$replicate <- rep(1:village$num_reps, each = village$num_donors)
         df <- df[df$time != 0,]
@@ -376,7 +368,7 @@ def_priors.Village <- function(village) {
   # define priors
   default_priors <- list(phi_mean = 0,
                          phi_var = 2,
-                         phi_r_var = 5,
+                         phi_r_var = 0.5,
                          theta_mean = phi_intercept,
                          theta_var = 2,
                          beta_var = 1,
@@ -438,13 +430,142 @@ modelversion.Village <- function(village) {
                          beta_var=village$priors[['beta_var']],
                          tau_g_var= village$priors[['tau_g_var']])
 
-  if (length(village$treatcol) == 0) {
-    village$stan <- "
+
+################################
+# Townlet model
+################################
+if (length(village$treatcol) == 0) {
+  village$stan <- "
+        data {
+            int<lower=0> N; // # of samples
+            int<lower=0> D; // # of donors
+            int<lower=0> R; // # of replicates
+            int<lower=0> P; // # of predictors
+            vector[N] x_t; // time(psg) indx across all samples
+            array[N] int<lower=0> rep_indx; // replicate index for pooled technical noise parameter phi
+            matrix[D*N,P] z_d; // predictors
+            matrix[N,D] alpha; // time 0 representaton values
+            matrix[N,D] Y; // response variable: donor representation matrix
+
+            // Set priors
+
+            //overdispersion priors
+            real phi_mean;
+            real phi_var;
+            real phi_r_var;
+            real theta_mean;
+            real theta_var;
+
+            // growthrate priors
+            real beta_var;
+            real tau_g_var;
+        }
+
+        parameters {
+            // overdispersion params
+            real<lower=0> theta0; // technical variation at T0
+            real phi; // time effect prior on technical variation
+            vector[R] phi_r; // time effect on technical variation partially pooled by replicate
+
+            // growthrate params
+            vector[D-1] beta_raw; // untransformed donor baseline proliferation effect
+            matrix[P-1, 1] tau_g; // donor covariates
+            real<lower=0> beta_rawvar; // beta variance
+        }
+        transformed parameters {
+            // partially pooling technical variation slope by replicate
+            vector[N] vphi_r;
+            for (n in 1:N){
+              vphi_r[n] = phi_r[rep_indx[n]];
+            }
+
+            // define technical variation of each sample
+            vector[N] exptheta;
+
+            for (n in 1:N){
+              exptheta[n] = exp(theta0 + x_t[n] * vphi_r[n]);
+            }
+
+            // Set baseline donor
+            vector[D] beta;
+            beta[D] = 0.0;
+
+            // transform growth rates to include baseline donor
+            for (d in 1:(D-1)) {
+                beta[d] = beta_raw[d];
+            }
+        }
+        model {
+            phi ~ normal(phi_mean, phi_var);
+            theta0 ~ normal(theta_mean, theta_var);
+
+            // sample time effect on technical variation patially pooled by replicate
+            for (r in 1:R) {
+              phi_r[r] ~ normal(phi, phi_r_var);
+            }
+
+            beta_rawvar ~ normal(0,beta_var);
+
+            // sample donor growth rates
+            for(d in 1:(D-1)) {
+                beta_raw[d] ~ normal(0, beta_rawvar);
+              }
+
+            // sample donor covariate effects
+            if(P > 1) {
+                for(i in 1:P-1){
+                    tau_g[i,1] ~ cauchy(0, tau_g_var);
+                }
+            }
+
+            // likelihood
+            for(n in 1:N){
+                vector[D] eta;
+                for(d in 1:D) {
+                    if(P > 1){
+                        eta[d] = alpha[n,d] + x_t[n] * (beta[d] + z_d[d +(n-1)*D,2:P] * tau_g[,1]);
+                    } else {
+                        eta[d] = alpha[n,d] + x_t[n] * beta[d];
+                    }
+                }
+                transpose(Y[n,]) ~ dirichlet(softmax(eta) * exptheta[n]);
+            }
+        }
+
+        "
+
+  if(village$ppck == TRUE) {
+    village$stan <- c(village$stan, "
+          generated quantities{
+              matrix[D,N] post_prck; // posterior predictive check
+              // matrix[D,N] post_pred; // posterior predictions (given covariates estimate obsv)
+              for(n in 1:N){
+                  vector[D] eta;
+                  // vector[D] eta_pp;
+                  for(d in 1:D) {
+                      if(P > 1){
+                          eta[d] = alpha[n,d] + x_t[n] * (beta[d] + z_d[d +(n-1)*D,2:P] * tau_g[,1]);
+                      } else {
+                          eta[d] = alpha[n,d] + x_t[n] * beta[d];
+                      }
+                  }
+                  post_prck[,n] = dirichlet_rng(softmax(eta) * exptheta[n]);
+              // post_pred[,n] = dirichlet_rng(softmax(eta_pp) * exptheta[1,n]);
+              }
+          }
+
+          ")
+  }
+} else {
+  print('Running model with donor specific treatment effects')
+  village$inputs <- c(village$inputs, tau_d_var=village$priors[['tau_d_var']])
+
+  village$stan <- "
           data {
-              int<lower=0> N; // # of samples
-              int<lower=0> D; // # of donors
-              int<lower=0> R; // # of replicates
-              int<lower=0> P; // # of predictors
+              int<lower=0> N; // number samples
+              int<lower=0> D; // number donors
+              int<lower=0> R; // number replicates
+              int<lower=0> P; // number predictors
               vector[N] x_t; // time(psg) indx across all samples
               array[N] int<lower=0> rep_indx; // replicate index for pooled technical noise parameter phi
               matrix[D*N,P] z_d; // predictors
@@ -463,18 +584,21 @@ modelversion.Village <- function(village) {
               // growthrate priors
               real beta_var;
               real tau_g_var;
+              real tau_d_var;
           }
 
           parameters {
               // overdispersion params
-              real<lower=0> theta0; // technical variation at T0
+              real theta0; // technical variation at T0
               real phi; // time effect prior on technical variation
               vector[R] phi_r; // time effect on technical variation partially pooled by replicate
 
               // growthrate params
-              vector[D-1] beta_raw; // untransformed donor baseline proliferation effect
-              matrix[P-1, 1] tau_g; // donor covariates
+              vector[D-1] beta_raw; // untransformed donor growth rates
+              matrix[P-2, 1] tau_g; // growth covariates
               real<lower=0> beta_rawvar; // beta variance
+              vector[D] tau_d; // treatment effect per donor
+
           }
           transformed parameters {
               // partially pooling technical variation slope by replicate
@@ -508,193 +632,64 @@ modelversion.Village <- function(village) {
                 phi_r[r] ~ normal(phi, phi_r_var);
               }
 
-              beta_rawvar ~ cauchy(0,beta_var);
+              // baseline donor proliferation
+              beta_rawvar ~ normal(0,beta_var);
 
-              // sample donor growth rates
+              // sample donor baeline proliferation effect
               for(d in 1:(D-1)) {
                   beta_raw[d] ~ normal(0, beta_rawvar);
                 }
 
               // sample donor covariate effects
-              if(P > 1) {
-                  for(i in 1:P-1){
+              if (P > 2) {
+                  for(i in 1:P-2){
                       tau_g[i,1] ~ cauchy(0, tau_g_var);
                   }
+              }
+
+              // sample treatment effects
+              for(d in 1:(D)) {
+                  tau_d[d] ~ cauchy(0, tau_d_var);
               }
 
               // likelihood
               for(n in 1:N){
                   vector[D] eta;
                   for(d in 1:D) {
-                      if(P > 1){
-                          eta[d] = alpha[n,d] + x_t[n] * (beta[d] + z_d[d +(n-1)*D,2:P] * tau_g[,1]);
+                      if(P < 3){
+                          eta[d] = alpha[n,d] + x_t[n] * (beta[d] + z_d[d +(n-1)*D,2] * tau_d[d]);
                       } else {
-                          eta[d] = alpha[n,d] + x_t[n] * beta[d];
+                          eta[d] = alpha[n,d] + x_t[n] * (beta[d] + z_d[d +(n-1)*D,2] * tau_d[d] + z_d[d +(n-1)*D,3:P] * tau_g[,1]);
                       }
                   }
                   transpose(Y[n,]) ~ dirichlet(softmax(eta) * exptheta[n]);
               }
           }
+        "
 
-          "
-
-    if(village$ppck == TRUE) {
-      village$stan <- c(village$stan, "
-            generated quantities{
-                matrix[D,N] post_prck; // posterior predictive check
-                // matrix[D,N] post_pred; // posterior predictions (given covariates estimate obsv)
-                for(n in 1:N){
-                    vector[D] eta;
-                    // vector[D] eta_pp;
-                    for(d in 1:D) {
-                        if(P > 1){
-                            eta[d] = alpha[n,d] + x_t[n] * (beta[d] + z_d[d +(n-1)*D,2:P] * tau_g[,1]);
-                        } else {
-                            eta[d] = alpha[n,d] + x_t[n] * beta[d];
+  if(village$ppck == TRUE) {
+    village$stan <- c(village$stan, "
+                   generated quantities{
+                        matrix[D,N] post_prck; // posterior predictive check
+                        // matrix[D,N] post_pred; // posterior predictions (given covariates estimate obsv)
+                        for(n in 1:N){
+                            vector[D] eta;
+                            // vector[D] eta_pp;
+                            for(d in 1:D) {
+                                if(P < 3){
+                                    eta[d] = alpha[n,d] + x_t[n] * (beta[d] + z_d[d +(n-1)*D,2] * tau_d[d]);
+                                } else {
+                                    eta[d] = alpha[n,d] + x_t[n] * (beta[d] + z_d[d +(n-1)*D,2] * tau_d[d] + z_d[d +(n-1)*D,3:P] * tau_g[,1]);
+                                }
+                            }
+                         post_prck[,n] = dirichlet_rng(softmax(eta) * exptheta[n]);
+                        // post_pred[,n] = dirichlet_rng(softmax(eta_pp) * exptheta[1,n]);
                         }
                     }
-                    post_prck[,n] = dirichlet_rng(softmax(eta) * exptheta[n]);
-                // post_pred[,n] = dirichlet_rng(softmax(eta_pp) * exptheta[1,n]);
-                }
-            }
-
-            ")
-    }
-  } else {
-    print('Running model with donor specific treatment effects')
-    village$inputs <- c(village$inputs, tau_d_var=village$priors[['tau_d_var']])
-
-    village$stan <- "
-            data {
-                int<lower=0> N; // number samples
-                int<lower=0> D; // number donors
-                int<lower=0> R; // number replicates
-                int<lower=0> P; // number predictors
-                vector[N] x_t; // time(psg) indx across all samples
-                array[N] int<lower=0> rep_indx; // replicate index for pooled technical noise parameter phi
-                matrix[D*N,P] z_d; // predictors
-                matrix[N,D] alpha; // time 0 representaton values
-                matrix[N,D] Y; // response variable: donor representation matrix
-
-                // Set priors
-
-                //overdispersion priors
-                real phi_mean;
-                real phi_var;
-                real phi_r_var;
-                real theta_mean;
-                real theta_var;
-
-                // growthrate priors
-                real beta_var;
-                real tau_g_var;
-                real tau_d_var;
-            }
-
-            parameters {
-                // overdispersion params
-                real theta0; // technical variation at T0
-                real phi; // time effect prior on technical variation
-                vector[R] phi_r; // time effect on technical variation partially pooled by replicate
-
-                // growthrate params
-                vector[D-1] beta_raw; // untransformed donor growth rates
-                matrix[P-2, 1] tau_g; // growth covariates
-                real<lower=0> beta_rawvar; // beta variance
-                vector[D] tau_d; // treatment effect per donor
-
-            }
-            transformed parameters {
-                // partially pooling technical variation slope by replicate
-                vector[N] vphi_r;
-                for (n in 1:N){
-                  vphi_r[n] = phi_r[rep_indx[n]];
-                }
-
-                // define technical variation of each sample
-                vector[N] exptheta;
-
-                for (n in 1:N){
-                  exptheta[n] = exp(theta0 + x_t[n] * vphi_r[n]);
-                }
-
-                // Set baseline donor
-                vector[D] beta;
-                beta[D] = 0.0;
-
-                // transform growth rates to include baseline donor
-                for (d in 1:(D-1)) {
-                    beta[d] = beta_raw[d];
-                }
-            }
-            model {
-                phi ~ normal(phi_mean, phi_var);
-                theta0 ~ normal(theta_mean, theta_var);
-
-                // sample time effect on technical variation patially pooled by replicate
-                for (r in 1:R) {
-                  phi_r[r] ~ normal(phi, phi_r_var);
-                }
-
-                // baseline donor proliferation
-                beta_rawvar ~ cauchy(0,beta_var);
-
-                // sample donor baeline proliferation effect
-                for(d in 1:(D-1)) {
-                    beta_raw[d] ~ normal(0, beta_rawvar);
-                  }
-
-                // sample donor covariate effects
-                if (P > 2) {
-                    for(i in 1:P-2){
-                        tau_g[i,1] ~ cauchy(0, tau_g_var);
-                    }
-                }
-
-                // sample treatment effects
-                for(d in 1:(D)) {
-                    tau_d[d] ~ cauchy(0, tau_d_var);
-                }
-
-                // likelihood
-                for(n in 1:N){
-                    vector[D] eta;
-                    for(d in 1:D) {
-                        if(P < 3){
-                            eta[d] = alpha[n,d] + x_t[n] * (beta[d] + z_d[d +(n-1)*D,2] * tau_d[d]);
-                        } else {
-                            eta[d] = alpha[n,d] + x_t[n] * (beta[d] + z_d[d +(n-1)*D,2] * tau_d[d] + z_d[d +(n-1)*D,3:P] * tau_g[,1]);
-                        }
-                    }
-                    transpose(Y[n,]) ~ dirichlet(softmax(eta) * exptheta[n]);
-                }
-            }
-          "
-
-    if(village$ppck == TRUE) {
-      village$stan <- c(village$stan, "
-                     generated quantities{
-                          matrix[D,N] post_prck; // posterior predictive check
-                          // matrix[D,N] post_pred; // posterior predictions (given covariates estimate obsv)
-                          for(n in 1:N){
-                              vector[D] eta;
-                              // vector[D] eta_pp;
-                              for(d in 1:D) {
-                                  if(P < 3){
-                                      eta[d] = alpha[n,d] + x_t[n] * (beta[d] + z_d[d +(n-1)*D,2] * tau_d[d]);
-                                  } else {
-                                      eta[d] = alpha[n,d] + x_t[n] * (beta[d] + z_d[d +(n-1)*D,2] * tau_d[d] + z_d[d +(n-1)*D,3:P] * tau_g[,1]);
-                                  }
-                              }
-                           post_prck[,n] = dirichlet_rng(softmax(eta) * exptheta[n]);
-                          // post_pred[,n] = dirichlet_rng(softmax(eta_pp) * exptheta[1,n]);
-                          }
-                      }
 
                           ")
     }
   }
-
   return(village)
 }
 
