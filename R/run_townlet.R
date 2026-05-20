@@ -10,7 +10,7 @@
 #' @param credinterval Credible interval for significance testing
 #' @param ppck Run posterior predictive check
 #' @param priors Set custom priors
-#' @param comp If running on server comp=1, else if running on local computer comp=0
+#' @param comp If running on server comp=TRUE, else if running on local computer comp=FALSE
 #'
 #' @returns Updated village object.
 #' @export
@@ -19,117 +19,116 @@
 #' \dontrun{
 #'   test_village <- run_townlet(test_village)
 #' }
-run_townlet <- function(village, cores=1, samples=2e3, warmup=1e3, chains=4, credinterval=0.95, ppck=TRUE, priors=NULL, comp=1) {
+run_townlet <- function(village, cores = 1, samples = 2e3, warmup = 1e3,
+                        chains = 4, credinterval = 0.95, ppck = TRUE,
+                        priors = NULL, comp = FALSE) {
   UseMethod("run_townlet")
 }
-#' @exportS3Method run_townlet Village
-run_townlet.Village <- function(village, cores=1, samples=2e3, warmup=1e3, chains=4, credinterval=0.95, ppck=TRUE, priors=NULL, comp=0) {
 
-  ## Check if the object is of class "Village"
+#' @exportS3Method run_townlet Village
+run_townlet.Village <- function(village, cores = 1, samples = 2e3, warmup = 1e3,
+                               chains = 4, credinterval = 0.95, ppck = TRUE,
+                               priors = NULL, comp = FALSE) {
+
   if (!inherits(village, "Village")) {
     stop("Object must be of class 'Village'. Call init_village() before running model.", call. = FALSE)
   }
 
-  # Set model specifications
-  print(paste("Credible interval threshold set to: ", credinterval))
   village$credinterval <- credinterval
 
-  if (ppck == TRUE) {
-    village$ppck <- 1
-  } else{village$ppck <- 0}
-
+  village$ppck <- ppck
   village$mcmc_samples <- samples
   village$mcmc_warmup <- warmup
   village$mcmc_chains <- chains
 
-  # Set model priors
   if (!is.null(priors)) {
     village$priors <- priors
   }
 
-  print('Defining model inputs')
   village <- model_inputs(village)
 
   village <- def_priors(village)
 
-  print('Setting up stan model')
   village <- modelversion(village)
 
-  print('Running model')
-  # server
-  if (comp == 1) {
-    options(mc.cores = cores)
+  message("Running model")
+
+  if (isTRUE(comp)) {
+    old_opts <- options(mc.cores = cores)
+  } else {
+    old_opts <- options(mc.cores = parallel::detectCores())
   }
-  # computer
-  if(comp == 0) {
-    options(mc.cores = parallel::detectCores())
-  }
+  on.exit(options(old_opts), add = TRUE)
 
   rstan::rstan_options(auto_write = TRUE)
 
-  tryCatch(
-    {village$fit <- rstan::stan(model_code = village$stan,
-                                data = village$inputs,
-                                chains=chains,
-                                warmup = warmup,
-                                iter= samples,
-                                cores = cores
-    )})
+  village$fit <- rstan::stan(
+    model_code = village$stan,
+    data = village$inputs,
+    chains = chains,
+    warmup = warmup,
+    iter = samples,
+    cores = cores
+  )
 
-  print('Running model diagnostics')
+  message("Running model diagnostics")
+
   village$num_divergent <- rstan::get_num_divergent(village$fit)
   village$num_maxtreedepth <- rstan::get_num_max_treedepth(village$fit)
   village$bfmi <- rstan::get_bfmi(village$fit)
 
-  print(paste('Divergences:', village$num_divergent))
-  print(paste('Tree depth:', village$num_maxtreedepth))
-  print(village$bfmi)
+  message("Divergences: ", village$num_divergent)
+  message("Tree depth: ", village$num_maxtreedepth)
+  message("BFMI: ", paste(round(village$bfmi, 3), collapse = ", "))
 
-  print('Generating model summary statistics')
   village <- sumstats(village)
 
-  if (village$sim == FALSE) {
-
-    print('Plotting effective samples size')
+  if (isFALSE(village$sim)) {
+    message("Plotting results and model diagnostics")
     tryCatch(
-      {plot_ESS(village)},
+      suppressWarnings(suppressMessages(plot_ESS(village))),
       error = function(e) {
-        print('ESS Plot Failed: ')
-        print(e)}
+        message("ESS Plot Failed: ", conditionMessage(e))
+      }
     )
 
-    print('Plotting model parameters and donor growthrates')
     tryCatch(
-      {village <- plot_params(village)},
+      {
+        village <- plot_params(village)
+      },
       error = function(e) {
-        print('Param plots failed: ')
-        print(e)
-        return(NULL)}
+        message("Param plots failed: ", conditionMessage(e))
+        NULL
+      }
     )
 
-    print('Plotting posterior predictive checks')
     tryCatch(
-      {village <- plot_ppck(village)},
+      {
+        village <- suppressWarnings(suppressMessages(plot_ppck(village)))
+      },
       error = function(e) {
-        print('ppck plot failed: ')
-        print(e)
-        return(NULL)}
+        message("ppck plot failed: ", conditionMessage(e))
+        NULL
+      }
     )
   }
 
-  print('Calculating mean growthmetric per donor for each treatment dose')
   tryCatch(
-    {village <- growthmetric(village)},
+    {
+      village <- growthmetric(village)
+    },
     error = function(e) {
-      print('Calculating growth effect failed: ')
-      print(e)
-      return(NULL)}
+      message("Calculating growth effect failed: ", conditionMessage(e))
+      NULL
+    }
   )
 
-  if(village$sim == FALSE) {
-    saveRDS(village, paste0(village$outdir, village$name, '.RDS'))
+  if (isFALSE(village$sim)) {
+    message("Townlet results saved to", village$outdir, village$name, ".RDS")
+    saveRDS(village, paste0(village$outdir, village$name, ".RDS"))
   }
-  return(village)
+
+  village
 }
 
 
@@ -143,48 +142,70 @@ run_townlet.Village <- function(village, cores=1, samples=2e3, warmup=1e3, chain
 model_inputs <- function(village) {
   UseMethod("model_inputs")
 }
+
 #' @exportS3Method model_inputs Village
 model_inputs.Village <- function(village) {
+
   ## T0 matrix [num_reps, num_donors]
-  cols <- c('sample',
-            village$treatcol,
-            "treatment_scaled",
-            "time",
-            "time_scaled",
-            "replicate",
-            'donorid',
-            'donor',
-            village$donorcov,
-            'representation')
+  cols <- c(
+    "sample",
+    village$treatcol,
+    "treatment_scaled",
+    "time",
+    "time_scaled",
+    "replicate",
+    "donorid",
+    "donor",
+    village$donorcov,
+    "representation"
+  )
+
   existing_cols <- intersect(cols, names(village$data))
   df <- village$data[, existing_cols]
 
-  if(length(village$treatcol) != 0) {
-    village$df_T0 <- df[df$time_scaled == 0, c('sample',
-                                               village$treatcol,
-                                               'treatment_scaled',
-                                               'replicate',
-                                               'donorid',
-                                               'donor',
-                                               'representation')]
-  } else{
-    village$df_T0 <- df[df$time_scaled == 0, c('sample',
-                                               'replicate',
-                                               'donorid',
-                                               'donor',
-                                               'representation')]
+  if (length(village$treatcol) == 1) {
+    village$df_T0 <- df[df$time_scaled == 0, c(
+      "sample",
+      village$treatcol,
+      "treatment_scaled",
+      "replicate",
+      "donorid",
+      "donor",
+      "representation"
+    )]
+  } else {
+    village$df_T0 <- df[df$time_scaled == 0, c(
+      "sample",
+      "replicate",
+      "donorid",
+      "donor",
+      "representation"
+    )]
   }
 
-  village$df_T0 <- village$df_T0 |>  group_by(sample) |>  mutate(representation = representation - representation[village$num_donors]) |>  ungroup()
-  df_T0 <- village$df_T0[, c('sample','donorid','representation')] |>  pivot_wider(id_cols = 'sample', names_from = 'donorid', values_from = 'representation')
+  village$df_T0 <-
+    village$df_T0 |>
+    dplyr::group_by(sample) |>
+    dplyr::mutate(
+      representation = representation - representation[village$num_donors]
+    ) |>
+    dplyr::ungroup()
 
-  if(any(is.na(df_T0[,-1]))) {
-    na_rows <- which(rowSums(is.na(df_T0[-1])) > 0)
+  df_T0 <-
+    village$df_T0[, c("sample", "donorid", "representation")] |>
+    tidyr::pivot_wider(
+      id_cols = "sample",
+      names_from = "donorid",
+      values_from = "representation"
+    )
+
+  if (any(is.na(df_T0[, -1]))) {
+    na_rows <- which(rowSums(is.na(df_T0[, -1])) > 0)
     na_samples <- df_T0$sample[na_rows]
-    stop(paste('Donor values missing in T0 samples', paste(na_samples, collapse = ', ')))
+    stop(paste("Donor values missing in T0 samples", paste(na_samples, collapse = ", ")))
   }
 
-  village$T0 <- as.matrix(df_T0[,-1])
+  village$T0 <- as.matrix(df_T0[, -1])
 
   # Check that all donors present in T0
   if (ncol(village$T0) != village$num_donors) {
@@ -208,26 +229,45 @@ model_inputs.Village <- function(village) {
 
   village$data_noT0 <- df[df$time_scaled != 0, ]
 
-  village$data_noT0 <- village$data_noT0 |> dplyr::group_by(sample) |>  dplyr::mutate(sample=dplyr::cur_group_id())
-  village$data_noT0 <- village$data_noT0[order(village$data_noT0$sample),]
+  village$data_noT0 <-
+    village$data_noT0 |>
+    dplyr::group_by(sample) |>
+    dplyr::mutate(sample = dplyr::cur_group_id())
+
+  village$data_noT0 <- village$data_noT0[order(village$data_noT0$sample), ]
+
   cols <- setdiff(existing_cols, c("donor", "donorid", "representation", village$donorcov))
-  df <- village$data_noT0[,c(cols, 'donorid', 'representation')] |>
-    pivot_wider(id_cols = all_of(cols), names_from = 'donorid', values_from = 'representation')
 
-  village$N = length(df$sample)
+  df <-
+    village$data_noT0[, c(cols, "donorid", "representation")] |>
+    tidyr::pivot_wider(
+      id_cols = all_of(cols),
+      names_from = "donorid",
+      values_from = "representation"
+    )
 
-  if(village$N != village$num_reps*(village$num_timepts)) {
-    stop(paste('Missing samples from data. Expecting:', village$num_reps*village$num_timepts, 'samples, only', village$N, 'samples present.'))
+  village$N <- length(df$sample)
+
+  if (village$N != village$num_reps * village$num_timepts) {
+    stop(paste(
+      "Missing samples from data. Expecting:",
+      village$num_reps * village$num_timepts,
+      "samples, only",
+      village$N,
+      "samples present."
+    ))
   }
-  if(any(is.na(df[, !(names(df) %in% cols)]))) {
+
+  if (any(is.na(df[, !(names(df) %in% cols)]))) {
     na_rows <- which(rowSums(is.na(df[, !(names(df) %in% cols)])) > 0)
     na_samples <- df$sample[na_rows]
-    stop(paste('Donor values missing in samples', paste(na_samples, collapse = ', ')))
+    stop(paste("Donor values missing in samples", paste(na_samples, collapse = ", ")))
   }
 
   village$Y <- as.array(as.matrix(df[, !colnames(df) %in% cols]))
-  if(ncol(village$Y) != village$num_donors) {
-    stop('Missing donors from data')
+
+  if (ncol(village$Y) != village$num_donors) {
+    stop("Missing donors from data")
   }
 
   ## time_indx of samples (vector length N)
@@ -236,36 +276,57 @@ model_inputs.Village <- function(village) {
   ## rep_indx of samples (vector length N)
   village$rep_indx <- as.vector(df$replicate)
 
-  #Set up z_d matrix
+  # Set up z_d matrix
   if (!is.null(village$model)) {
+
     if (length(village$treatcol) == 1) {
-      if(length(village$donorcov[grepl('treatment_', village$donorcov)]) >0) {
-        treat_original <- village$donorcov[grepl('treatment_', village$donorcov)]
-        treat_interact <- str_remove(treat_original, village$treatcol) |>
-          str_remove(":")
-        treat_interact <- paste(treat_interact, 'treatment_scaled', sep = ':')
-        village$model <- paste0('~ ', paste(c('treatment_scaled', village$donorcov[!(village$donorcov %in% treat_original)], treat_interact), collapse = ' + '))
+
+      if (length(village$donorcov[grepl("treatment_", village$donorcov)]) > 0) {
+
+        treat_original <- village$donorcov[grepl("treatment_", village$donorcov)]
+
+        treat_interact <-
+          stringr::str_remove(treat_original, village$treatcol) |>
+          stringr::str_remove(":")
+
+        treat_interact <- paste(treat_interact, "treatment_scaled", sep = ":")
+
+        village$model <- paste0(
+          "~ ",
+          paste(
+            c(
+              "treatment_scaled",
+              village$donorcov[!(village$donorcov %in% treat_original)],
+              treat_interact
+            ),
+            collapse = " + "
+          )
+        )
+
       } else {
-        village$model <- paste0('~ ', paste(c('treatment_scaled', village$donorcov), collapse = ' + '))
+        village$model <- paste0(
+          "~ ",
+          paste(c("treatment_scaled", village$donorcov), collapse = " + ")
+        )
       }
     }
 
-    village$z_d <- model.matrix(as.formula(village$model), data=village$data_noT0)
+    village$z_d <- model.matrix(as.formula(village$model), data = village$data_noT0)
     village$P <- ncol(village$z_d)
 
     # Check if matrix is full rank
     rank <- qr(village$z_d)$rank
-    if(rank != ncol(village$z_d)) {
-      stop('Model identity matrix is not full rank.')
+    if (rank != ncol(village$z_d)) {
+      stop("Model identity matrix is not full rank.")
     }
+
   } else {
-    village$z_d <- matrix(1, nrow = village$num_donors*village$N, ncol = 1)
+    village$z_d <- matrix(1, nrow = village$num_donors * village$N, ncol = 1)
     village$P <- 1
   }
 
-  return(village)
+  village
 }
-
 
 #' Define model priors
 #'
@@ -277,36 +338,49 @@ model_inputs.Village <- function(village) {
 def_priors <- function(village) {
   UseMethod("def_priors")
 }
+
 #' @exportS3Method def_priors Village
 def_priors.Village <- function(village) {
 
   # Model priors
-  if(length(village$treatcol) == 0 & (isTRUE(village$ebayes) | is.null(village$priors))) {
+  if (length(village$treatcol) == 0 & (isTRUE(village$ebayes) | is.null(village$priors))) {
+
     if (village$num_timepts == 1) {
+
       phi_intercept <- 8
       phi_slope <- 0
+
     } else {
+
       # empirical Bayes
-      df <- village$data |> select(donor, time, replicate, representation)
+      df <- village$data |>
+        dplyr::select(donor, time, replicate, representation)
+
       df$i <- 1
 
-      if(village$sim == FALSE & length(unique(df$replicate[df$time == 0])) != village$num_reps) {
-        df_0 <- dplyr::bind_rows(replicate(village$num_reps, df[df$time ==0,], simplify = FALSE))
+      if (village$sim == FALSE &&
+          length(unique(df$replicate[df$time == 0])) != village$num_reps) {
+
+        df_0 <- dplyr::bind_rows(
+          replicate(village$num_reps, df[df$time == 0, ], simplify = FALSE)
+        )
+
         df_0$replicate <- rep(1:village$num_reps, each = village$num_donors)
-        df <- df[df$time != 0,]
+
+        df <- df[df$time != 0, ]
         df <- rbind(df, df_0)
-        df <- df[order(df$time),]
+        df <- df[order(df$time), ]
       }
 
       data <- df |>
-        select(i, time, replicate, donor, representation) |>
-        pivot_wider(names_from = donor, values_from = representation)
+        dplyr::select(i, time, replicate, donor, representation) |>
+        tidyr::pivot_wider(names_from = donor, values_from = representation)
 
       # Fitting frequentist Dirichlet
       df_freqdir <- data |>
-        group_by(i) |>
-        group_modify(~ {
-          # Set up data
+        dplyr::group_by(i) |>
+        dplyr::group_modify(~ {
+
           response_data <- .x[, !(colnames(.x) %in% c("time", "replicate"))]
           pred_data <- .x[, c("time", "replicate")]
 
@@ -314,88 +388,134 @@ def_priors.Village <- function(village) {
             return(data.frame(value = NA_real_, param = NA_character_, donor = NA_real_))
           }
 
-          # Fit model
           result <- tryCatch({
 
-            smp <- DirichletReg::DR_data(response_data,
-                                         base = village$num_donors)
+            smp <- DirichletReg::DR_data(response_data, base = village$num_donors)
+
             fit <- DirichletReg::DirichReg(
               formula = smp ~ time | 1,
               data = pred_data,
-              model = 'alternative'
+              model = "alternative"
             )
 
-            # Extract fit parameters
             params <- unlist(coef(fit)) |> as.data.frame()
             params$param <- rownames(params)
             params
 
           }, error = function(e) {
-            warning(paste("Error in group:", paste(names(.y), .y, sep = "=", collapse = ", "), "\nError message:", e$message))
+
+            warning(
+              paste(
+                "Error in group:",
+                paste(names(.y), .y, sep = "=", collapse = ", "),
+                "\nError message:",
+                e$message
+              )
+            )
+
             data.frame(value = NA_real_, param = NA_character_, donor = NA_real_)
           })
 
-          return(result)
+          result
         })
 
-      phi_intercept <- round(df_freqdir$`unlist(coef(fit))`[df_freqdir$param == 'gamma.gamma.(Intercept)'], 3)
-      betad_mean <- abs(df_freqdir$`unlist(coef(fit))`[df_freqdir$param != 'gamma.gamma.(Intercept)'])*5
+      phi_intercept <- round(
+        df_freqdir$`unlist(coef(fit))`[df_freqdir$param == "gamma.gamma.(Intercept)"],
+        3
+      )
 
-      print('Using empirical bayes to estimate dispersion')
+      betad_mean <- abs(
+        df_freqdir$`unlist(coef(fit))`[df_freqdir$param != "gamma.gamma.(Intercept)"]
+      ) * 5
+
+      warning("Using empirical bayes to estimate dispersion")
     }
   }
 
-  if(length(village$treatcol) == 1 & (isTRUE(village$ebayes) | is.null(village$priors))) {
-    # empirical bayes
-    df <- village$data[, c('donor', 'time_scaled', 'replicate', 'representation', 'treatment_scaled')]
-    df <- pivot_wider(df, id_cols = c('time_scaled', 'replicate', 'treatment_scaled'),names_from = 'donor', values_from = 'representation')
-    df$Y <- DirichletReg::DR_data(df[,4:ncol(df)])
+  if (length(village$treatcol) == 1 & (isTRUE(village$ebayes) | is.null(village$priors))) {
 
-    tryCatch(
-      {model <- DirichletReg::DirichReg(Y ~ treatment_scaled + time_scaled | time_scaled, data=df, model= 'alternative')
-      model_summary <- summary(model)
-      phi_intercept <- model_summary$coefficients[startsWith(names(model_summary$coefficients), '(phi):(Intercept)')]
-      phi_slope <- model_summary$coefficients[startsWith(names(model_summary$coefficients), '(phi):time_scaled')]
-      }, error = function(e) {
-        print(paste('Error in DirichletReg model fitting:', e$message))
-        print('Using default phi priors')
-        phi_intercept <<- 8
-        phi_slope <<- 2
-      }
+    df <- village$data[, c(
+      "donor",
+      "time_scaled",
+      "replicate",
+      "representation",
+      "treatment_scaled"
+    )]
+
+    df <- tidyr::pivot_wider(
+      df,
+      id_cols = c("time_scaled", "replicate", "treatment_scaled"),
+      names_from = "donor",
+      values_from = "representation"
     )
+
+    df$Y <- DirichletReg::DR_data(df[, 4:ncol(df)])
+
+    tryCatch({
+
+      model <- DirichletReg::DirichReg(
+        Y ~ treatment_scaled + time_scaled | time_scaled,
+        data = df,
+        model = "alternative"
+      )
+
+      model_summary <- summary(model)
+
+      phi_intercept <- model_summary$coefficients[
+        startsWith(names(model_summary$coefficients), "(phi):(Intercept)")
+      ]
+
+      phi_slope <- model_summary$coefficients[
+        startsWith(names(model_summary$coefficients), "(phi):time_scaled")
+      ]
+
+    }, error = function(e) {
+
+      message("Error in DirichletReg model fitting: ", e$message)
+      message("Using default phi priors")
+
+      phi_intercept <- 8
+      phi_slope <- 2
+    })
   }
 
   # define priors
-  default_priors <- list(phi_mean = 0,
-                         phi_var = 2,
-                         phi_r_var = 0.5,
-                         theta_mean = phi_intercept,
-                         theta_var = 2,
-                         beta_var = 1,
-                         tau_g_var= 2,
-                         tau_d_var = 0.5)
+  default_priors <- list(
+    phi_mean = 0,
+    phi_var = 2,
+    phi_r_var = 0.5,
+    theta_mean = phi_intercept,
+    theta_var = 2,
+    beta_var = 1,
+    tau_g_var = 2,
+    tau_d_var = 0.5
+  )
+
   prnames <- names(default_priors)
 
+  if (!is.null(village$priors)) {
 
-  # Check user defined priors
-  if(!is.null(village$priors)) {
     if (is.null(names(village$priors))) {
       stop("Please provide all model priors as a named list")
     }
-    if(isTRUE(village$ebayes)) {
-      village$priors$phi_mean = 0
-      village$priors$theta_mean = phi_intercept
+
+    if (isTRUE(village$ebayes)) {
+      village$priors$phi_mean <- 0
+      village$priors$theta_mean <- phi_intercept
     }
+
     actual_names <- names(village$priors)
     missing_names <- setdiff(prnames, actual_names)
-    if(length(missing_names) > 0) {
-      stop(paste0('Missing the following priors: ', paste(missing_names, collapse = ', ')))
+
+    if (length(missing_names) > 0) {
+      stop(paste0("Missing the following priors: ", paste(missing_names, collapse = ", ")))
     }
+
   } else {
     village$priors <- default_priors
   }
 
-  return(village)
+  village
 }
 
 #' Define townlet model
@@ -534,7 +654,7 @@ if (length(village$treatcol) == 0) {
 
         "
 
-  if(village$ppck == TRUE) {
+  if(isTRUE(village$ppck)) {
     village$stan <- c(village$stan, "
           generated quantities{
               matrix[D,N] post_prck; // posterior predictive check
@@ -557,7 +677,7 @@ if (length(village$treatcol) == 0) {
           ")
   }
 } else {
-  print('Running model with donor specific treatment effects')
+  # Running model with donor specific treatment effects
   village$inputs <- c(village$inputs, tau_d_var=village$priors[['tau_d_var']])
 
   village$stan <- "
@@ -667,7 +787,7 @@ if (length(village$treatcol) == 0) {
           }
         "
 
-  if(village$ppck == TRUE) {
+  if(isTRUE(village$ppck)) {
     village$stan <- c(village$stan, "
                    generated quantities{
                         matrix[D,N] post_prck; // posterior predictive check
@@ -703,20 +823,25 @@ if (length(village$treatcol) == 0) {
 sumstats <- function(village) {
   UseMethod("sumstats")
 }
+
 #' @exportS3Method sumstats Village
 sumstats.Village <- function(village) {
-  sumstats <- rstan::summary(village$fit, include_warmup = FALSE)$summary |>  as.data.frame()
-  sumstats$paramname <- row.names(sumstats)
-  if(village$ppck == 1) {
-    village$summary_ppck <- sumstats[startsWith(sumstats$paramname, 'post_'),]
-  }
-  village$summary_params <- sumstats[!startsWith(sumstats$paramname, 'post_'),]
 
-  return(village)
+  sumstats <- rstan::summary(village$fit, include_warmup = FALSE)$summary |>
+    as.data.frame()
+
+  sumstats$paramname <- row.names(sumstats)
+
+  if (isTRUE(village$ppck)) {
+    village$summary_ppck <- sumstats[startsWith(sumstats$paramname, "post_"), ]
+  }
+
+  village$summary_params <- sumstats[!startsWith(sumstats$paramname, "post_"), ]
+
+  village
 }
 
-
-#' Define model priors
+#' Donor proliferation effects
 #'
 #' Internal generic function that calculates total donor proliferation effects.
 #'
@@ -726,63 +851,114 @@ sumstats.Village <- function(village) {
 growthmetric <- function(village) {
   UseMethod("growthmetric")
 }
+
 #' @exportS3Method growthmetric Village
 growthmetric.Village <- function(village) {
-  cols <- c('donor', 'donorid')
+
+  cols <- c("donor", "donorid")
   df_donor <- village$data_noT0[, cols]
 
-
   if (village$num_donorcov > 0) {
+
     if (length(village$treatcol) > 0) {
-      df_donor <- cbind(df_donor, village$z_d[,-1:-2])
+      df_donor <- cbind(df_donor, village$z_d[, -c(1, 2)])
     } else {
-      df_donor <- cbind(df_donor, village$z_d[,-1])
+      df_donor <- cbind(df_donor, village$z_d[, -1])
     }
 
     colnames(df_donor)[3:ncol(df_donor)] <- village$donorcov
   }
+
   df_donor <- df_donor |>
     dplyr::distinct(across(all_of(colnames(df_donor))))
 
-  df <- data.frame(beta=village$summary_params$mean[startsWith(village$summary_params$paramname, 'beta[')],
-                   donorid= village$summary_params$paramname[startsWith(village$summary_params$paramname, 'beta[')])
-  df$donorid <- df$donorid |> str_remove('.*\\[') |> str_remove('\\]') |> as.integer()
+  df <- data.frame(
+    beta = village$summary_params$mean[
+      startsWith(village$summary_params$paramname, "beta[")
+    ],
+    donorid = village$summary_params$paramname[
+      startsWith(village$summary_params$paramname, "beta[")
+    ]
+  )
 
-  df <- merge(df_donor, df, by='donorid')
+  df$donorid <- df$donorid |>
+    stringr::str_remove(".*\\[") |>
+    stringr::str_remove("\\]") |>
+    as.integer()
+
+  df <- merge(df_donor, df, by = "donorid")
   df$gr_control <- df$beta
 
-  if(village$num_donorcov > 0){
+  if (village$num_donorcov > 0) {
+
     for (d in 1:length(village$donorcov)) {
-      df[, paste0('dcov_', village$donorcov[d])] <-
-        village$summary_params$mean[startsWith(village$summary_params$paramname, paste0('tau_g[', d, ',1]'))]
-      df$gr_control <- df$gr_control + df[, paste0('dcov_', village$donorcov[d])] * df[, paste0(village$donorcov[d])]
+
+      df[, paste0("dcov_", village$donorcov[d])] <-
+        village$summary_params$mean[
+          startsWith(
+            village$summary_params$paramname,
+            paste0("tau_g[", d, ",1]")
+          )
+        ]
+
+      df$gr_control <-
+        df$gr_control +
+        df[, paste0("dcov_", village$donorcov[d])] *
+        df[, paste0(village$donorcov[d])]
     }
   }
 
-  if(length(village$treatcol) == 1){
+  if (length(village$treatcol) == 1) {
+
     dosescaled <- unique(village$data$treatment_scaled)
     doses <- village$doses[order(village$doses)]
-    df_treat <- data.frame(tau_d=village$summary_params$mean[startsWith(village$summary_params$paramname, 'tau_d')],
-                           donorid= village$summary_params$paramname[startsWith(village$summary_params$paramname, 'tau_d')])
-    df_treat$donorid <- df_treat$donorid |> str_remove('.*\\[') |> str_remove('\\]') |> as.integer()
 
-    df <- merge(df, df_treat, by='donorid')
+    df_treat <- data.frame(
+      tau_d = village$summary_params$mean[
+        startsWith(village$summary_params$paramname, "tau_d")
+      ],
+      donorid = village$summary_params$paramname[
+        startsWith(village$summary_params$paramname, "tau_d")
+      ]
+    )
+
+    df_treat$donorid <- df_treat$donorid |>
+      stringr::str_remove(".*\\[") |>
+      stringr::str_remove("\\]") |>
+      as.integer()
+
+    df <- merge(df, df_treat, by = "donorid")
+
     for (d in 1:village$num_doses) {
-      df[, paste0('eta_', village$treatment, '_dose', doses[d])] <- df$gr_control + df$tau_d * dosescaled[d]
-      if(doses[d] > 0) {
-        df[, paste0('beta_', village$treatment, '_dose', doses[d])] <- df$tau_d * dosescaled[d]
+
+      df[, paste0("eta_", village$treatment, "_dose", doses[d])] <-
+        df$gr_control + df$tau_d * dosescaled[d]
+
+      if (doses[d] > 0) {
+        df[, paste0("beta_", village$treatment, "_dose", doses[d])] <-
+          df$tau_d * dosescaled[d]
       }
     }
-    village$df_proliferation <- df[, c('donor', 'donorid', 'tau_d', colnames(df)[startsWith(colnames(df), paste0('eta_', village$treatment))])]
+
+    village$df_proliferation <- df[, c(
+      "donor",
+      "donorid",
+      "tau_d",
+      colnames(df)[startsWith(colnames(df), paste0("eta_", village$treatment))]
+    )]
 
   } else {
-    village$df_proliferation <- df |>
-      select(donor, donorid, starts_with('gr_')) |>
-      distinct()
 
-    names(village$df_proliferation)[names(village$df_proliferation) == "gr_control"] <- "eta"
+    village$df_proliferation <- df |>
+      dplyr::select(donor, donorid, dplyr::starts_with("gr_")) |>
+      dplyr::distinct()
+
+    names(village$df_proliferation)[
+      names(village$df_proliferation) == "gr_control"
+    ] <- "eta"
   }
-  return(village)
+
+  village
 }
 
 #' Extract draws for eta
@@ -795,31 +971,54 @@ growthmetric.Village <- function(village) {
 extract_eta <- function(village) {
   UseMethod("extract_eta")
 }
+
 #' @exportS3Method extract_eta Village
 extract_eta.Village <- function(village) {
-  df_cont <- rstan::extract(village$fit,
-                            pars= village$summary_params$paramname[startsWith(village$summary_params$paramname, 'beta[')],
-                            permuted=FALSE) |>  as.data.frame()
-  df_cont <- pivot_longer(df_cont, cols=1:ncol(df_cont))
-  df_cont$donorid <- stringr::str_remove(df_cont$name, '.*\\[') |>  str_remove("\\]") |>  as.numeric()
-  df_cont$name <- 'beta'
 
-  if (length(village$treatcol) != 0) {
-    df_treat <- rstan::extract(village$fit,
-                               pars= village$summary_params$paramname[startsWith(village$summary_params$paramname,'tau_d')],
-                               permuted=FALSE) |>  as.data.frame()
-    df_treat <- pivot_longer(df_treat, cols=1:ncol(df_treat))
-    df_treat$donorid <- stringr::str_remove(df_treat$name, '.*\\[') |>  str_remove("\\]") |>  as.numeric()
-    df_treat$name <- paste0('tau[d,', village$treatment, ']')
+  df_cont <- rstan::extract(
+    village$fit,
+    pars = village$summary_params$paramname[
+      startsWith(village$summary_params$paramname, "beta[")
+    ],
+    permuted = FALSE
+  ) |>
+    as.data.frame()
 
-    df_all <- rbind(df_cont,df_treat)
+  df_cont <- tidyr::pivot_longer(df_cont, cols = 1:ncol(df_cont))
+
+  df_cont$donorid <- stringr::str_remove(df_cont$name, ".*\\[") |>
+    stringr::str_remove("\\]") |>
+    as.numeric()
+
+  df_cont$name <- "beta"
+
+  if (length(village$treatcol) > 0) {
+
+    df_treat <- rstan::extract(
+      village$fit,
+      pars = village$summary_params$paramname[
+        startsWith(village$summary_params$paramname, "tau_d")
+      ],
+      permuted = FALSE
+    ) |>
+      as.data.frame()
+
+    df_treat <- tidyr::pivot_longer(df_treat, cols = 1:ncol(df_treat))
+
+    df_treat$donorid <- stringr::str_remove(df_treat$name, ".*\\[") |>
+      stringr::str_remove("\\]") |>
+      as.numeric()
+
+    df_treat$name <- paste0("tau[d,", village$treatment, "]")
+
+    df_all <- rbind(df_cont, df_treat)
     rtrnlst <- list(df_all, df_treat, df_cont)
 
   } else {
+
     df_all <- df_cont
     rtrnlst <- list(df_all, df_cont)
   }
 
-  return(rtrnlst)
+  rtrnlst
 }
-
