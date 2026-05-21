@@ -7,9 +7,8 @@
 #' @importFrom stringr str_remove str_remove_all str_replace_all str_trim str_detect str_extract
 #' @importFrom rlang .data sym syms
 #' @importFrom stats median quantile as.formula
-#' @importFrom utils read.csv
+#' @importFrom utils read.csv write.csv
 #' @importFrom grid unit
-#' @importFrom methods representation
 #' @importFrom stats cov model.matrix time
 #' @importFrom data.table :=
 
@@ -393,7 +392,7 @@ validate_village.Village <- function(village) {
   ## Check for zeros in compositions
   if (any(village$data$representation == 0)) {
     sigma <- min(
-      min(village$data$representation[village$representation > 0]), 
+      min(village$data$representation[village$representation > 0]),
       0.002)
 
     village$data$representation[village$data$representation == 0] <- sigma
@@ -454,45 +453,45 @@ validate_village.Village <- function(village) {
   # check for equal number of reps per donor, time and treatment
   cols <- c("donor", "time", village$treatcol)
 
-  village$rep_summary <- village$data[,c(village$treatcol, "replicate", "donor", "time")] |> 
-    dplyr::distinct() |> 
+  village$rep_summary <- village$data[,c(village$treatcol, "replicate", "donor", "time")] |>
+    dplyr::distinct() |>
     dplyr::group_by(dplyr::across(dplyr::all_of(cols))) |>
     dplyr::summarise(
       total_reps = dplyr::n_distinct(replicate),
       .groups = "drop"
-    ) 
-  
-  equal_sample_reps <- length(unique(rep_summary$total_reps)) == 1
-  
+    )
+
+  equal_sample_reps <- length(unique(village$rep_summary$total_reps)) == 1
+
   if (isFALSE(equal_sample_reps)) {
-    warning("Missing data! Not all donors, treatments and time points have the same number of replicates. 
+    warning("Missing data! Not all donors, treatments and time points have the same number of replicates.
     Double check village$rep_summary to see what is missing.")
   }
-  
+
   if (length(village$treatcol) != 0) {
 
-    village$rep_summary <- rep_summary |>
+    village$rep_summary <- village$rep_summary |>
     tidyr::pivot_wider(
-      names_from = .data[[village$treatcol]],
+      names_from = all_of(village$treatcol),
       values_from = total_reps,
       names_prefix = paste0(village$treatcol, "_")
     )
 
     # Check that each treatment has unique replicate index
     rep_summary <- village$data[,c('replicate', village$treatcol)] |>  distinct()
-    
+
     rep_summary <- split(
       rep_summary$replicate,
       rep_summary[[village$treatcol]]
     )
-    
+
     rep_summary <- lapply(rep_summary, sort)
-    
+
     allreps_same <- length(unique(rep_summary)) == 1
-    
+
     if (isTRUE(allreps_same)) {
-      stop("Make sure each treatment replicate is indexed independently, so Townlet can accuretly model dispersion 
-      (e.g. Dose 1 (Replicates 1,2,3), Dose 2 (Replicate = 4,5,6)... if each dose has 3 replicates).") 
+      stop("Make sure each treatment replicate is indexed independently, so Townlet can accuretly model dispersion
+      (e.g. Dose 1 (Replicates 1,2,3), Dose 2 (Replicate = 4,5,6)... if each dose has 3 replicates).")
     }
   }
 
