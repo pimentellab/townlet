@@ -2,7 +2,7 @@
 % Please edit documentation in R/plots.R
 \name{plot_eta}
 \alias{plot_eta}
-\title{Plot donor beta parameters per treatment}
+\title{Plot total proliferation effect}
 \usage{
 plot_eta(village, lowci, highci, df_all, df_donor)
 }
@@ -13,14 +13,14 @@ plot_eta(village, lowci, highci, df_all, df_donor)
 
 \item{highci}{Higher bound of credible interval}
 
-\item{df_all}{Data frame of draws.}
+\item{df_all}{Optional data frame containing treatment parameter draws.}
 
-\item{df_donor}{Donor identification info}
+\item{df_donor}{Data frame with distinct donor ids/names.}
 }
 \value{
 None
 }
 \description{
-Internal generic function to plot violin plot of beta parameters per treatment.
+Internal generic function to plot violin of total donor proliferation effect per treatment dose.
 }
 \keyword{internal}

@@ -13,6 +13,6 @@ t0_checkrep(village)
 An updated village object. Also saves a diagnostic plot.
 }
 \description{
-Internal generic function to check donor representation at time 0.
+Internal generic function to check for donors that have low representation at time 0 using the T0_cutoff threshold set by user.
 }
 \keyword{internal}

@@ -18,7 +18,7 @@ A data frame with 437 rows and 5 variables:
 Simulated
 }
 \usage{
-testdata
+data(testdata)
 }
 \description{
 A village donor composition test data set.

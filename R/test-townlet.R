@@ -5,7 +5,7 @@
 #' @export
 test_townlet <- function() {
   # write temp data file
-  data("testdata", package = "townlet")
+  utils::data("testdata", package = "townlet", envir = parent.frame())
   tmp_csv <- file.path("./df_temp.csv")
   write.csv(testdata, tmp_csv, row.names = FALSE)
 
@@ -34,8 +34,8 @@ test_townlet <- function() {
              "./test_townlet/test_townlet.RDS"
   )
 
-  if(all(townlet_files %in% files)) {
-    print('Townlet installation successful!')
+  if(all(files %in% townlet_files)) {
+    message('Townlet installation successful!')
   }
 
   on.exit(file.remove(tmp_csv), add = TRUE)

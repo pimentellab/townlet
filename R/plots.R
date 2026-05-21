@@ -1269,6 +1269,7 @@ plot_growthmetric.Village <- function(village, lowci, highci, df_treat = NULL, d
 plot_eta <- function(village, lowci, highci, df_all, df_donor) {
   UseMethod("plot_eta")
 }
+#' @exportS3Method plot_eta Village
 plot_eta.Village <- function(village, lowci, highci, df_all, df_donor) {
 
   df_beta_stats <- df_all |>
