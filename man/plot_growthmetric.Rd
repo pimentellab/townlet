@@ -30,7 +30,7 @@ plot_growthmetric(
 
 \item{df_dcov}{Donor covariate parameter draws.}
 
-\item{returnboth}{If returnboth = TRUE A list of data and plots. Data includes lfsr calculations for treatment/donor covariate parameters.}
+\item{returnboth}{If TRUE returns list of data and plots. Data includes lfsr calculations.}
 }
 \value{
 List of data (lfsr) and plot.

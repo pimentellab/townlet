@@ -2,7 +2,7 @@
 % Please edit documentation in R/run_townlet.R
 \name{growthmetric}
 \alias{growthmetric}
-\title{Define model priors}
+\title{Donor proliferation effects}
 \usage{
 growthmetric(village)
 }

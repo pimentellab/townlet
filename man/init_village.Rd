@@ -22,11 +22,11 @@ init_village(
 \arguments{
 \item{datapath}{File path to census composition data (see github tutorial for df format)}
 
-\item{model}{Regression model including all optional donor covariates and treatments (e.g. ~sex + treatment_lead + sex:treatment_lead). If no covariates/treatments included in analysis then model=NULL.}
+\item{model}{Regression model including all optional donor covariates and treatments (e.g. ~sex + treatment_lead + sex:treatment_lead). If no covariates/treatments included in analysis then model = NULL.}
 
 \item{normalize}{Force normalization of representation so that it sums to 1.}
 
-\item{outdir}{Out directory to save results}
+\item{outdir}{Output directory to save results}
 
 \item{name}{Name for output directory/files}
 
@@ -34,26 +34,29 @@ init_village(
 
 \item{T0_cutoff}{Threshold for excluding under represented donors at T0.}
 
-\item{alldonors}{Include all donors? If False, normalization will be forced.}
+\item{alldonors}{Include all donors? If FALSE, normalization will be forced.}
 
-\item{sim}{If using townlet to run simulations model fit will be saved, but no plots will be generated.}
+\item{sim}{If TRUE, runs in simulation mode (no plots generated).}
 
-\item{timeunit}{Time unit for samples (e.g., Days, Cell passages, etc.)}
+\item{timeunit}{Time unit for samples (e.g. days, cell passages, etc.)}
 
-\item{baseline}{Choose baseline donor (warning: see github tutorial before overriding default)}
+\item{baseline}{Choose baseline donor (see documentation before overriding default)}
 
-\item{ebayes}{Use empirical bayes method to set dispersion prior variance}
+\item{ebayes}{Use empirical Bayes method to set dispersion prior variance}
 }
 \value{
-Village object with correctly formatted data for running townlet donor proliferation analysis
+A Village object with formatted data for townlet donor proliferation analysis
 }
 \description{
-Formats users village composition data and checks that required columns () are present to run townlet analysis. Plots raw data for inspection and sets baseline donor.
+Formats user village composition data and checks that required columns are present to run townlet analysis. Plots raw data for inspection and sets baseline donor.
 }
 \examples{
 \dontrun{
-test_village <- init_village(datapath='./village_census.csv',
-  model= '~sex + treatment_lead + sex:treatment_lead',
-  name='test_townlet', outdir='./')
+test_village <- init_village(
+  datapath = "./village_census.csv",
+  model = "~sex + treatment_lead + sex:treatment_lead",
+  name = "test_townlet",
+  outdir = "./"
+)
 }
 }

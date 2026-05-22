@@ -1,3 +1,6 @@
 ^townlet\.Rproj$
 ^\.Rproj\.user$
 ^LICENSE\.md$
+^Dockerfile$
+^images$
+^townlet\.yml$

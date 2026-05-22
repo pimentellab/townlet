@@ -13,7 +13,7 @@ run_townlet(
   credinterval = 0.95,
   ppck = TRUE,
   priors = NULL,
-  comp = 1
+  comp = FALSE
 )
 }
 \arguments{
@@ -33,7 +33,7 @@ run_townlet(
 
 \item{priors}{Set custom priors}
 
-\item{comp}{If running on server comp=1, else if running on local computer comp=0}
+\item{comp}{If running on server comp=TRUE, else if running on local computer comp=FALSE}
 }
 \value{
 Updated village object.

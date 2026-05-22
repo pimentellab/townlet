@@ -7,16 +7,16 @@
 Village(
   datapath,
   model,
-  normalize = FALSE,
-  outdir = "./",
-  name = "testmodel",
-  cls,
+  normalize,
+  alldonors,
   T0_cutoff,
-  alldonors = TRUE,
-  sim = FALSE,
+  name,
   timeunit,
-  baseline = NULL,
-  ebayes
+  baseline,
+  colors,
+  sim,
+  ebayes,
+  outdir
 )
 }
 \description{
