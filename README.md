@@ -15,8 +15,7 @@
 
 ## Installation
 
-### Option 1: 
-Townlet uses [rstan](https://mc-stan.org/rstan/) to run inference. Please ensure that rstan is properly installed before installing townlet. 
+Townlet uses [rstan](https://mc-stan.org/rstan/) to run inference. Rstan can be challenging to install, so we highly recommend using docker or apptainer environments to run Townlet. 
 
 Townlet was built with the following dependencies. 
 
@@ -35,8 +34,9 @@ dependencies:
   - r-tidyr=1.3.1
   - r-remotes=2.5.0
 ```
+<br>
 
-### Option 2 (recommended): 
+### Option 1 Docker (recommended): 
 
 Step 1: Install [Docker](https://www.docker.com/products/docker-desktop/)
 <br><br>
@@ -66,7 +66,31 @@ This will run Townlet on a simulated data set and will save fitted model and res
 
 Step 5: Run Townlet on your own village composition data 
 
-Note- if you are working in a docker virtual environment it can only see files and subdirectories in the location where you launched from. Make sure your village composition data is in that directory. See tutorial below for how to format data, run townlet and interpret results. 
+Note- if you are working in a docker virtual environment it can only see files and subdirectories in the location where you launched from. Make sure your village composition data is in that directory. See tutorial below for how to format data, run townlet and interpret results.
+
+<br>
+
+### Option 2 Singularity / Apptainer (recommended):
+
+If you are running on a cluster or server with Singularity/Apptainer installed, you can build the image with:
+
+```R
+apptainer pull townlet_v1.0.0.sif \
+  docker://ghcr.io/hansonch/townlet-rstudio:v1.0.0 
+```
+<br>
+
+### Option 3 Manual installation (not recommended):
+
+Townlet depends on [rstan](https://mc-stan.org/rstan/) for inference, which can be difficult to install and configure correctly across systems. Only use this option if Docker or Singularity are not possible. First, install rstan and then run the following code to install Townlet and test if installation was successful: 
+
+```R
+remotes::install_github("hansonch/townlet")
+
+library(townlet)
+test_townlet()
+```
+<br><br>
 
 ## Submit a bug report
 
