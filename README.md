@@ -66,7 +66,7 @@ This will run Townlet on a simulated data set and will save fitted model and res
 
 Step 5: Run Townlet on your own village composition data 
 
-Note- if you are working in a docker virtual environment it can only see files and subdirectories in the location where you launched from. Make sure your village composition data is in the directory where you launch docker from and your filepath variables in all function calls are relative to your docker virtual environment filepath! See tutorial below for how to format data, run townlet and interpret results. 
+Note- if you are working in a docker virtual environment it can only see files and subdirectories in the location where you launched from. Make sure your village composition data is in that directory. See tutorial below for how to format data, run townlet and interpret results. 
 
 ## Submit a bug report
 
@@ -98,13 +98,13 @@ library(townlet)
 
 # Initiate village object
 village <- init_village(datapath,              # composition data filepath (.csv)
+                        model=NULL,            # Define linear model
+                        normalize=FALSE,       # Compositional data must sum to 1. If removing a donor set to normalize=TRUE to renormalize. 
                         outdir= './',          # output directory
                         name='test_townlet',   # File name prefix 
-                        model=NULL,            # Define linear model
-                        alldonors=TRUE,        # Include all original donors
-                        normalize=FALSE,       # Compositional data must sum to 1. If removing a donor set to normalize=TRUE to renormalize. 
                         cls=NULL,              # Colors to use for each donor
-                        T0_cutoff=NULL,        # Remove donors from analysis with very low representation at time 0  
+                        T0_cutoff=NULL,        # Remove donors from analysis with very low representation at time 0
+                        alldonors=TRUE,        # Include all original donors 
                         sim=FALSE,             # If using model for simulated data set to sim=TRUE to only save model fit (no plots). 
                         timeunit='days',       # Time unit of experiment (e.g. days, cell passages, etc.)
                         baseline=NULL,         # Set baseline donor
@@ -119,7 +119,7 @@ Townlet can model both treatment-specific donor relative proliferation and test 
 
 *1) Estimate donor proliferation in control conditions*
 
-To estimate donor relative proliferation rates with no treatments or included donor group covariates set model=NULL. 
+To estimate donor relative proliferation rates with no treatments or donor group covariates included set model=NULL. 
 
 *2) Estimate treatment-specific donor proliferation*
 
@@ -134,7 +134,7 @@ To test for significant differences in proliferation between different donor gro
 Compositional data format
 ___
 
-Please provide townlet's init_village() function with a filepath to a .csv file which has the following required column names (donor, time, replicate, representation). Optional columns must also be included if estimating treatment or donor covariate effects (e.g. if model=treatment_lead + sex + treatment_lead:sex, include additional columns: treatment_lead, sex). 
+Please provide townlet's init_village() function with a filepath to a .csv file which has the following required column names (donor, time, replicate, representation). Optional columns must also be included if estimating treatment or donor covariate effects (e.g. if model=treatment_lead + sex + treatment_lead:sex, include additional columns: treatment_lead, sex). All tretment columns must begin with 'treatment_' and include a minimum of two doses (e.g. 0, 5). When including a treatment in the model make sure to index each dose replicate independently (e.g. If 3 replicates per dose, then the replicate indexes will be dose 1: 1,2,3; dose 2: 4,5,6; ...).
 
 <img src="images/dataformat.png" alt="Input data format" width="500"/>
 
@@ -157,15 +157,15 @@ village$median_donors
 
 ```
 
-Townlet performs best when the baseline donor has a median proliferation rate, a consistent proliferation trajectory across replicates and when not from a donor group that is imbalanced in its representation.  
+Townlet performs best when the baseline donor is from the reference group (when including donor covariates), has a median proliferation rate, a consistent proliferation trajectory across replicates and when not from a donor group that is imbalanced in its representation.  
 
 *1) Baseline donor needs to be a median grower in village*
 
-Do not choose the fastest or slowest growers in your village as the baseline grower or inference will be inaccurate based on the models prior structure! The median donor will be selected automatically if the user does not specify a baseline donor (baseline = NULL). 
+Do not choose the fastest or slowest donors as the baseline, as inference may be biased by the model structure. If the user does not specify a baseline donor (baseline = NULL), Townlet automatically selects one using a median representation rank-based approach. This method only approximates donor proliferation. Users should confirm that the selected baseline behaves as a median grower by inspecting the estimated proliferation effects and, if necessary, rerun the model with a more appropriate user-specified baseline. It is also a good idea to check other baseline donors near the median to confirm that covariate inference is stable.
 
 *2) Choose a consistent grower*
 
-Sometimes donors in a village may have inconsistent proliferation across time points and it is important to not choose these donors as the baseline (e.g. representation may sharply go up, then down, etc.). Instead try to choose a donor that consistently (linearly) increases or decreases in representation over time. You can run the init_village() and check the generated ‘rawdata_scatter.png’ plot to see if the chosen baseline donor has any inconsistencies. We also recommend checking the posterior predictive check plot (ppck_barplot.png) to make sure the training samples fall within the distributions for the baseline donor. If not, consider testing an alternative median grower.   
+Sometimes donors in a village may have inconsistent proliferation across time points and it is important to not choose these donors as the baseline (e.g. representation may sharply go up, then down, etc.). Instead try to choose a donor that consistently increases or decreases in representation over time. You can run the init_village() and check the generated ‘rawdata_scatter.png’ plot to see if the chosen baseline donor has any inconsistencies. We also recommend checking the posterior predictive check plot (ppck_barplot.png) to make sure the training samples fall within the distributions for the baseline donor. If not, consider testing an alternative median grower.   
 
 *3) Avoid donors that are from imbalanced groups*
 
@@ -175,7 +175,7 @@ If there is an imbalance in the number of donors that you are testing for a give
 
 ### Step 2: Run model
 
-Once village object is successfully initiated the model can be run using the following function. We recommend changing the number of cores equal to the number of chains (e.g. cores=4) and using all default settings. There may be certain circumstances where the sample/warmup number should be increased (see below for details). 
+Once village object is successfully initiated the model can be run using the following function. We recommend changing the number of cores equal to the number of chains (e.g. cores=4) and using all default settings. There may be certain circumstances where the sample/warmup number should be increased (see below for details). We do not recommend changing the model priors as the current model structure has been shown to maximize power. 
 
 ```{r}
 village <- run_townlet(village,                # Village initiated using init_village()
@@ -185,8 +185,8 @@ village <- run_townlet(village,                # Village initiated using init_vi
                        chains=4,               # Number of sample chains
                        credinterval=0.95,      # Credible interval threshold
                        ppck=TRUE,              # Run posterior predictive checks
-                       priors=NULL,            # Provide custom priors
-                       comp=0)                 # Run on local computer comp=0, server comp=1   
+                       priors=NULL,            # Provide custom priors for sensitivity analysis
+                       comp=FALSE)             # Run on local computer comp=FALSE, server comp=TRUE   
 ```
 <br><br>
 
@@ -239,7 +239,7 @@ village$df_proliferation
 
 *Double check model diagnostics*
 
-It is a good idea to check model diagnostics. If any of these threshold are not met double check data inputs and consider model choice carefully. If you have limited replication and/or a lot of technical variation in your village experiment overly complex models may not fit well! 
+It is a good idea to check model diagnostics. If any of these threshold are not met double check data inputs and consider model choice carefully. If you have limited replication and/or a lot of technical variation in your village experiment overly complex models may not fit well. 
 
 ```{r}
 # Should return zero, if not interpret results with caution, double check input data format
