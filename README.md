@@ -6,7 +6,7 @@
   <img src="images/logo.png" width="120"/>
 </td>
 <td>
-  Hierarchical Dirichlet regression model for infering statistically significant treatment specific donor and group (e.g. sex, ancestry, genetics) proliferation effects from cell village compositional data.
+  Hierarchical Dirichlet regression model for inferring statistically significant treatment specific donor and group (e.g. sex, ancestry, genetics) proliferation effects from cell village compositional data.
 </td>
 </tr>
 </table>
